@@ -1,0 +1,11 @@
+# Only the Claude Code mods live in this repo; the other skills come from elsewhere.
+/*
+!/.gitignore
+!/README.md
+!/quiet-bash/
+!/quiet-spinner/
+!/reminder-log/
+!/usage-percent/
+.claude-plugin/types/
+!/mr-banner/
+!/coderabbit-band/

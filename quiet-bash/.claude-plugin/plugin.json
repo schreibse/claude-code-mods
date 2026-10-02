@@ -1,0 +1,7 @@
+{
+  "name": "quiet-bash",
+  "version": "0.1.0",
+  "description": "One-line transcript rows for Bash calls and plan-file edits; /quiet toggles full rows",
+  "author": { "name": "Stephan Schreiber" },
+  "types": "./types/index.d.ts"
+}

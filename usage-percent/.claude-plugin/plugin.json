@@ -1,0 +1,9 @@
+{
+  "name": "usage-percent",
+  "version": "0.1.0",
+  "description": "pi-style usage percentages under the prompt: context, 5-hour and weekly limits",
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "types": "./types/index.d.ts"
+}

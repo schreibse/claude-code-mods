@@ -46,6 +46,11 @@ export function shortPath(path: string): string {
   return path.replace(/^\/home\/[^/]+/, '~')
 }
 
+// herdr's ctrl+click ignores file:// and a `Link` takes only https or localhost, so the herdr plugin local.link-toast opens this URL's path.
+export function openFileUrl(path: string): string {
+  return `http://localhost/open-file${path.split('/').map(encodeURIComponent).join('/')}`
+}
+
 export function shots(tool: string, input: unknown): { caption: string; files: string[] } | null {
   const fields = (input ?? {}) as Fields
   const files =

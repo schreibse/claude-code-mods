@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Hook, Register } from 'claude-code'
 
-import { THUMB_BOXES, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isPng, isQuietRead, keepsResult, pngPathsIn, shortPath, shotMeta, shots, summary, thumbArgs } from './rows'
+import { THUMB_BOXES, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isPng, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shortPath, shotMeta, shots, summary, thumbArgs } from './rows'
 import type { ShotInfo, ThumbSize } from './rows'
 import type { Thumb } from '../types'
 
@@ -56,7 +56,7 @@ async function thumbsOf($: EngineInterface, call: { tool: string }, result: unkn
 }
 
 function drawThumbs($: EngineInterface, e: TerminalRender, list: readonly Thumb[]) {
-  const { Box, Image, Text } = $.ui.resolve(e)
+  const { Box, Image, Link, Text } = $.ui.resolve(e)
   const room = Math.max(20, (e.viewport?.columns ?? 100) - 6)
   return (
     <Box flexDirection="column" paddingLeft={2}>
@@ -69,7 +69,7 @@ function drawThumbs($: EngineInterface, e: TerminalRender, list: readonly Thumb[
               {...fit(thumb.info, { columns: Math.min(box.columns, room), rows: box.rows })}
               alt={thumb.file}
             />
-            <Text dimColor>{shortPath(thumb.file)} · {thumb.info.width}×{thumb.info.height}</Text>
+            <Text dimColor><Link href={openFileUrl(thumb.file)} label={shortPath(thumb.file)} />{` · ${thumb.info.width}`}×{thumb.info.height}</Text>
           </Box>
         )
       })}

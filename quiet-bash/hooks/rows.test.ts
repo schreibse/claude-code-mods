@@ -1,5 +1,14 @@
 import { test, expect } from 'claude-code/testing'
-import { THUMB_BOXES, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isQuietRead, keepsResult, pngPathsIn, shotMeta, shots, summary, thumbArgs } from './rows'
+import { THUMB_BOXES, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shotMeta, shots, summary, thumbArgs } from './rows'
+
+test('thumbnail paths link to the herdr open-file handler', () => {
+  expect(openFileUrl('/tmp/a/sheet-2410.png')).toBe('http://localhost/open-file/tmp/a/sheet-2410.png')
+  for (const path of ['/tmp/my shots/ä.png', '/tmp/a#b?c.png']) {
+    const url = openFileUrl(path)
+    expect(new URL(url).href).toBe(url)
+    expect(decodeURIComponent(new URL(url).pathname.slice('/open-file'.length))).toBe(path)
+  }
+})
 
 test('durations show only for slow calls', () => {
   expect(elapsed(undefined)).toBe('')

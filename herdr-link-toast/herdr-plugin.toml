@@ -1,0 +1,25 @@
+id = "local.link-toast"
+name = "Link toast"
+version = "0.2.0"
+min_herdr_version = "0.9.0"
+description = "Opens ctrl+clicked URLs, and quiet-bash thumbnail paths, with a toast"
+platforms = ["linux"]
+
+[[actions]]
+id = "open"
+title = "Open link with toast"
+contexts = ["workspace"]
+command = ["bash", "open.sh"]
+
+# Before any-url: handlers match in manifest order. quiet-bash links thumbnails this way, since herdr ignores file:// links.
+[[link_handlers]]
+id = "local-file"
+title = "Open local file with toast"
+pattern = "^http://localhost/open-file/"
+action = "open"
+
+[[link_handlers]]
+id = "any-url"
+title = "Open link with toast"
+pattern = "^https?://"
+action = "open"

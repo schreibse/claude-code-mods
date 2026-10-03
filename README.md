@@ -69,6 +69,17 @@ kitty_graphics = true
 Then `herdr server reload-config`, open a **new** herdr pane (old panes keep the old environment)
 and start Claude Code there. Check it: `/thumb /path/to/some.png` should draw the picture.
 
+### herdr-link-toast (a herdr plugin, not a Claude Code mod)
+
+herdr opens a ctrl+clicked link in the background with no feedback, and ignores `file://` links
+altogether. [herdr-link-toast](herdr-link-toast/) opens `http(s)` links with `xdg-open` and shows a
+toast. It also opens the path in quiet-bash's thumbnail captions, which link to
+`http://localhost/open-file/<path>` because `file://` isn't clickable in herdr. Install:
+
+```sh
+herdr plugin link ~/.claude/skills/herdr-link-toast
+```
+
 Without herdr, in plain kitty or Ghostty, none of this is needed. Terminals without the kitty
 graphics protocol show the thumbnail's alt text (its path).
 

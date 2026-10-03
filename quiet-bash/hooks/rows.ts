@@ -1,3 +1,5 @@
+import type { Thumb, Thumbs } from '../types'
+
 const PLAN_FILE = /\/\.claude\/plans\/[^/]+$/
 const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i
 
@@ -173,4 +175,11 @@ export function thumbArgs(args: string): { file: string; size: ThumbSize } | { p
     return { pasted: true }
   }
   return { file, size: file === trimmed ? 'small' : 'large' }
+}
+
+// The newest call showing an unchanged image keeps it, so a Read checked before SendUserFile does not draw it twice.
+export function supersede(all: Thumbs, id: string, found: readonly Thumb[]): Thumbs {
+  const isShown = (thumb: Thumb) => found.some(f => f.file === thumb.file && f.mtimeMs === thumb.mtimeMs)
+  const rest = Object.fromEntries(Object.entries(all).map(([key, list]) => [key, key.startsWith('cmd:') ? list : list.filter(thumb => !isShown(thumb))]))
+  return { ...rest, [id]: [...found] }
 }

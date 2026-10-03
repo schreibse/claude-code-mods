@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { THUMB_BOXES, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shotMeta, shots, summary, thumbArgs } from './rows'
+import { THUMB_BOXES, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
 
 test('thumbnail paths link to the herdr open-file handler', () => {
   expect(openFileUrl('/tmp/a/sheet-2410.png')).toBe('http://localhost/open-file/tmp/a/sheet-2410.png')
@@ -87,4 +87,13 @@ test('/thumb arguments pick the size and catch pasted images', () => {
   expect(thumbArgs(' /a/b.png ')).toEqual({ file: '/a/b.png', size: 'small' })
   expect(thumbArgs('big /a/b.png')).toEqual({ file: '/a/b.png', size: 'large' })
   expect(thumbArgs('[Image #5]')).toEqual({ pasted: true })
+})
+
+test('an unchanged image draws only under the newest call that showed it', () => {
+  const info = { width: 10, height: 10, bytes: 1 }
+  const sheet = { file: '/a/sheet.png', size: 'small' as const, info, mtimeMs: 1 }
+  const other = { ...sheet, file: '/a/other.png' }
+  const all = { read: [sheet, other], 'cmd:/a/sheet.png': [sheet] }
+  expect(supersede(all, 'send', [sheet])).toEqual({ read: [other], 'cmd:/a/sheet.png': [sheet], send: [sheet] })
+  expect(supersede({ read: [sheet] }, 'send', [{ ...sheet, mtimeMs: 2 }]).read).toEqual([sheet])
 })

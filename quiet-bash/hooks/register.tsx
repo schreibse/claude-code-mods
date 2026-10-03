@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Hook, Register } from 'claude-code'
 
-import { THUMB_BOXES, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isPng, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shortPath, shotMeta, shots, summary, thumbArgs } from './rows'
+import { THUMB_BOXES, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isPng, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shortPath, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
 import type { ShotInfo, ThumbSize } from './rows'
 import type { Thumb } from '../types'
 
@@ -102,6 +102,9 @@ async function toolRow($: EngineInterface, e: ToolUseRender, engineRow: () => Re
   const { Box, Text } = $.ui.resolve(e)
   const isFailed = isErrored && !isInterrupted
   const shot = isRunning || isFailed ? null : shots(tool, input)
+  if (shot !== null && (await read($, thumbs))[e.props.tool_use_id]?.length === 0) {
+    return <Box />
+  }
 
   if (shot !== null) {
     const found = await Promise.all(shot.files.map(file => shotInfo($, file)))
@@ -169,7 +172,7 @@ export const register: Register = on => {
       }
       const found = await thumbsOf($, e, result, since).catch(() => [])
       if (found.length > 0) {
-        await update($, thumbs, all => ({ ...all, [e.tool_use_id]: found }))
+        await update($, thumbs, all => supersede(all, e.tool_use_id, found))
       }
       return result
     } finally {
@@ -200,7 +203,11 @@ export const register: Register = on => {
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
     const { calls, isExpanded } = e.props
     const shown = await read($, thumbs)
-    if (calls.some(call => shots(call.tool, call.input) !== null || shown[call.tool_use_id ?? ''] !== undefined)) {
+    const hasThumb = (call: (typeof calls)[number]) => {
+      const list = shown[call.tool_use_id ?? '']
+      return list === undefined ? shots(call.tool, call.input) !== null : list.length > 0
+    }
+    if (calls.some(hasThumb)) {
       return next({ ...e, props: { ...e.props, isExpanded: true } })
     }
     if (isExpanded || calls.some(call => call.isErrored) || (await read($, isLoud))) {

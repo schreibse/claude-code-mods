@@ -184,7 +184,7 @@ export function scoped(command: string): string {
     return command
   }
   const quoted = `'${rest.replace(/'/g, `'\\''`)}'`
-  const wrapped = `systemd-run --user --scope -q --slice=claude-cmd.slice --expand-environment=no -p MemoryMax=8G -p MemorySwapMax=1G -- bash -c ${quoted}`
+  const wrapped = `systemd-run --user --scope -q --slice=claude-cmd.slice --expand-environment=no -p MemoryMax=30% -p MemorySwapMax=4% -- bash -c ${quoted}`
   return cds === '' ? wrapped : `${cds.trim()} ${wrapped}`
 }
 

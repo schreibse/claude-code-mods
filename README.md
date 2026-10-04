@@ -104,7 +104,7 @@ says `off (betterleaks)`, and the next call scans again.
 
 Every Bash command that names a Node tool (`node`, `npx`, `pnpm`, `npm`, `yarn`, `nx`, `jest`,
 `vitest`, `playwright`, `tsc`, `ngc`) runs as
-`systemd-run --user --scope --slice=claude-cmd.slice -p MemoryMax=8G -p MemorySwapMax=1G -- bash -c '…'`,
+`systemd-run --user --scope --slice=claude-cmd.slice -p MemoryMax=30% -p MemorySwapMax=4% -- bash -c '…'`,
 so an overrun dies with exit 137 instead of taking the desktop down. Leading `cd … &&` stay
 outside the wrapper, so the shell's directory still moves.
 
@@ -115,13 +115,16 @@ The rules read what each part of a command runs (after `&&`, `|`, `;`, `&`, `$( 
 **Assumes** this setup; the messages name it:
 
 - a `claude-cmd.slice` user unit. Without it systemd makes the slice with no limit of its own:
-  each command is still capped at 8G, but the headroom check has nothing to measure and stays off:
+  each command is still capped at 30 % of RAM, but the headroom check has nothing to measure and stays off:
   ```ini
   # ~/.config/systemd/user/claude-cmd.slice
   [Slice]
-  MemoryMax=8G
-  MemorySwapMax=1G
+  MemoryMax=30%
+  MemorySwapMax=4%
   ```
+  systemd turns a percentage into bytes of the machine's RAM (on 27 GiB: 8.2G and 1.1G), so the
+  same unit fits any machine. Check what a machine gets:
+  `systemd-run --user --scope -q -p MemoryMax=30% -- sh -c 'cat /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.max'`
 - repos whose heavy scripts have a `:lite` twin (`lint:affected:lite`, `typecheck:lite`,
   `test:affected:lite`) and a slow `ci:local` script.
 

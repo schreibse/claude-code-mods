@@ -101,7 +101,7 @@ test('a full or pressured command slice refuses, with the numbers', () => {
 })
 
 test('node commands are scoped once, leading cds stay outside, everything else is left alone', () => {
-  const wrap = 'systemd-run --user --scope -q --slice=claude-cmd.slice --expand-environment=no -p MemoryMax=8G -p MemorySwapMax=1G -- bash -c'
+  const wrap = 'systemd-run --user --scope -q --slice=claude-cmd.slice --expand-environment=no -p MemoryMax=30% -p MemorySwapMax=4% -- bash -c'
   expect(scoped("pnpm exec jest -t 'it works'")).toBe(`${wrap} 'pnpm exec jest -t '\\''it works'\\'''`)
   expect(scoped('cd app && cd "my dir" && npx nx build api')).toBe(`cd app && cd "my dir" && ${wrap} 'npx nx build api'`)
   expect(scoped('npx tsc && cd x')).toBe(`${wrap} 'npx tsc && cd x'`)

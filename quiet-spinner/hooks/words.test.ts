@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { word } from './register'
+import { word } from './words'
 
 test('each mode gets a plain word', () => {
   expect(word('thinking')).toBe('thinking')

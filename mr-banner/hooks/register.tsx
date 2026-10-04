@@ -2,11 +2,11 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Hook, Register } from 'claude-code'
 
 import { cardFrom, kindOf, label, mergeRequestIn } from './cards'
-import type { Cards, MrCard, MrKind } from '../types'
+import type { MrCard, MrKind } from '../types'
 
 type Render = Parameters<Hook<'ui.render'>>[1]
 
-const cards = atom({ plugin: 'mr-banner', key: 'cards' } as const, {} as Cards)
+const cards = atom({ plugin: 'mr-banner', key: 'cards' } as const, {})
 
 const COLORS: Record<MrKind, string> = { created: 'green', merged: 'magenta', approved: 'cyan', reviewed: 'yellow' }
 const ICONS: Record<MrKind, string> = { created: '✦', merged: '⛙', approved: '✔', reviewed: '✎' }
@@ -42,8 +42,9 @@ function drawCard($: EngineInterface, e: Render, card: MrCard) {
 
 export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
-    const input = e as unknown as Record<string, unknown>
-    const kind = kindOf(e.tool, input)
+    // The GitLab MCP tools name their MR as project_id and merge_request_iid, untyped while no MCP tool is declared.
+    const input: Record<string, unknown> = e
+    const kind = kindOf(e.tool, e.tool === 'Bash' ? e.command : undefined)
     const result = await next(e)
     if (kind === null || result.deny !== undefined || result.isError) {
       return result

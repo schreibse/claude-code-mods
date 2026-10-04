@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { fingerprint, isWorthShowing, openCount, severityOf, tallyOf } from './tally'
+import { discussionsIn, fingerprint, isWorthShowing, openCount, severityOf, tallyOf } from './tally'
 
 const RABBIT = { username: 'coderabbitai' }
 const thread = (severity: string, resolved: boolean) => ({
@@ -41,4 +41,11 @@ test('all resolved and no nitpicks hides the band; a changed count shows it agai
   const one = tallyOf([thread('🟡 Minor', false)], '!1', 'https://x')!
   const two = tallyOf([thread('🟡 Minor', false), thread('🟠 Major', false)], '!1', 'https://x')!
   expect(fingerprint(one)).not.toBe(fingerprint(two))
+})
+
+test('every page’s discussions count, one per ndjson line', () => {
+  const ndjson = [thread('🟠 Major', false), thread('🟡 Minor', false)].map(discussion => JSON.stringify(discussion)).join('\n') + '\n'
+  expect(discussionsIn(ndjson)).toHaveLength(2)
+  expect(openCount(tallyOf(discussionsIn(ndjson), '!1', 'https://x')!)).toBe(2)
+  expect(discussionsIn('')).toEqual([])
 })

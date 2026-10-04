@@ -9,15 +9,25 @@ const MR = JSON.stringify({
 })
 
 test('GitLab MR writes and gh/glab commands map to a kind', () => {
-  expect(kindOf('mcp__gitlab__create_merge_request', {})).toBe('created')
-  expect(kindOf('mcp__gitlab__merge_merge_request', {})).toBe('merged')
-  expect(kindOf('mcp__gitlab__create_merge_request_thread', {})).toBe(null)
-  expect(kindOf('mcp__gitlab__get_merge_request', {})).toBe(null)
-  expect(kindOf('Bash', { command: 'gh pr create --title x --body y' })).toBe('created')
-  expect(kindOf('Bash', { command: 'cd repo && glab mr merge 12 --yes' })).toBe('merged')
-  expect(kindOf('Bash', { command: 'gh pr review 4 --approve' })).toBe('approved')
-  expect(kindOf('Bash', { command: 'gh pr review 4 --comment -b ok' })).toBe('reviewed')
-  expect(kindOf('Bash', { command: 'gh pr view 4' })).toBe(null)
+  expect(kindOf('mcp__gitlab__create_merge_request')).toBe('created')
+  expect(kindOf('mcp__gitlab__merge_merge_request')).toBe('merged')
+  expect(kindOf('mcp__gitlab__create_merge_request_thread')).toBe(null)
+  expect(kindOf('mcp__gitlab__get_merge_request')).toBe(null)
+  expect(kindOf('Bash', 'gh pr create --title x --body y')).toBe('created')
+  expect(kindOf('Bash', 'cd repo && glab mr merge 12 --yes')).toBe('merged')
+  expect(kindOf('Bash', 'gh pr review 4 --approve')).toBe('approved')
+  expect(kindOf('Bash', 'gh pr review 4 --comment -b ok')).toBe('reviewed')
+  expect(kindOf('Bash', 'gh pr view 4')).toBe(null)
+})
+
+test('only a gh/glab command in its own right counts, and not its help', () => {
+  expect(kindOf('Bash', 'git fetch && glab mr create -t x')).toBe('created')
+  expect(kindOf('Bash', 'git fetch; GH_HOST=github.com gh pr merge 3')).toBe('merged')
+  expect(kindOf('Bash', 'echo "glab mr create"')).toBe(null)
+  expect(kindOf('Bash', 'git commit -m "then gh pr create"')).toBe(null)
+  expect(kindOf('Bash', 'gh pr merge --help')).toBe(null)
+  expect(kindOf('Bash', 'glab mr create -h | head')).toBe(null)
+  expect(kindOf('Bash', 'gh pr create --head topic -t x')).toBe('created')
 })
 
 test('a created MR card carries ref, title and link', () => {

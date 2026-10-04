@@ -14,6 +14,9 @@ export function severityOf(body: string): Severity {
   return SEVERITIES.find(severity => severity === label) ?? 'other'
 }
 
+// `glab api --paginate --output ndjson` prints one discussion per line, across all pages.
+export const discussionsIn = (ndjson: string): Discussion[] => ndjson.split('\n').filter(line => line.trim() !== '').map(line => JSON.parse(line) as Discussion)
+
 export function tallyOf(discussions: readonly Discussion[], ref: string, url: string): Tally | null {
   const firsts = discussions.flatMap(discussion => (isRabbit(discussion.notes?.[0]) ? [discussion.notes![0]!] : []))
   if (firsts.length === 0) {

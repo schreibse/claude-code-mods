@@ -1,6 +1,6 @@
 import type { MrCard, MrKind } from '../types'
 
-// Threads and thread replies get no card: a review posts one per finding, mr-threads replies by the dozen.
+// Threads and thread replies get no card: a review posts one per finding, and replies come by the dozen.
 const GITLAB_KINDS: Record<string, MrKind> = {
   mcp__gitlab__create_merge_request: 'created',
   mcp__gitlab__merge_merge_request: 'merged',
@@ -10,21 +10,22 @@ const GITLAB_KINDS: Record<string, MrKind> = {
   mcp__gitlab__bulk_publish_draft_notes: 'reviewed',
 }
 
-const CLI = /\b(?:glab\s+mr|gh\s+pr)\s+(create|merge|approve|review|note|comment)\b/
+// Only a command in its own right counts (start of a line or after `&&`, `||`, `;`, `|`), not one quoted inside another.
+const CLI = /(?:^|&&|[;|])\s*(?:\w+=\S*\s+)*(?:glab\s+mr|gh\s+pr)\s+(create|merge|approve|review|note|comment)\b([^;&|\n]*)/m
 const MR_URL = /https?:\/\/[^\s"'<>\\)]+?\/(?:-\/merge_requests|pull)\/\d+/
 // `gh pr merge` and `gh pr review` name the PR only as `owner/repo#12`.
 const GH_REF = /\b([\w.-]+\/[\w.-]+)#(\d+)\b/
 
-export function kindOf(tool: string, input: Record<string, unknown>): MrKind | null {
+export function kindOf(tool: string, command = ''): MrKind | null {
   if (tool !== 'Bash') {
     return GITLAB_KINDS[tool] ?? null
   }
-  const verb = CLI.exec(String(input.command ?? ''))?.[1]
-  if (verb === undefined) {
+  const [, verb, args = ''] = CLI.exec(command) ?? []
+  if (verb === undefined || /(?:^|\s)(?:--help|-h)\b/.test(args)) {
     return null
   }
   if (verb === 'review') {
-    return /\s(--approve|-a)\b/.test(String(input.command)) ? 'approved' : 'reviewed'
+    return /\s(--approve|-a)\b/.test(args) ? 'approved' : 'reviewed'
   }
   return verb === 'create' ? 'created' : verb === 'merge' ? 'merged' : verb === 'approve' ? 'approved' : 'reviewed'
 }

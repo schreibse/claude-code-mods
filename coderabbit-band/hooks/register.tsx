@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { ICONS, SEVERITIES, fingerprint, isWorthShowing, openCount, tallyOf } from './tally'
+import { ICONS, SEVERITIES, discussionsIn, fingerprint, isWorthShowing, openCount, tallyOf } from './tally'
 import type { Tally } from '../types'
 
 const TICK_MS = 60_000
@@ -17,6 +17,7 @@ const hiddenAt = atom({ plugin: 'coderabbit-band', key: 'hiddenAt' } as const, n
 type Poll = { root: string; branch: string; dueAt: number; fastUntil: number; isBusy: boolean }
 
 const CODERABBIT_ORANGE = '#FF570A'
+const HOSTS_WITHOUT_CODERABBIT = /github\.com|dev\.azure\.com|visualstudio\.com/
 
 async function fetchTally($: EngineInterface, root: string, branch: string): Promise<Tally | null> {
   const mr = await $.process.run(['glab', 'mr', 'view', branch, '-F', 'json'], { cwd: root, timeoutMs: 20_000 })
@@ -27,8 +28,11 @@ async function fetchTally($: EngineInterface, root: string, branch: string): Pro
   if (state !== 'opened') {
     return null
   }
-  const notes = await $.process.run(['glab', 'api', `projects/:fullpath/merge_requests/${iid}/discussions?per_page=100`], { cwd: root, timeoutMs: 20_000 })
-  return notes.exitCode === 0 ? tallyOf(JSON.parse(notes.stdout), `!${iid}`, web_url) : null
+  const notes = await $.process.run(
+    ['glab', 'api', '--paginate', '--output', 'ndjson', `projects/:fullpath/merge_requests/${iid}/discussions?per_page=100`],
+    { cwd: root, timeoutMs: 20_000 },
+  )
+  return notes.exitCode === 0 ? tallyOf(discussionsIn(notes.stdout), `!${iid}`, web_url) : null
 }
 
 async function tick($: EngineInterface, poll: Poll) {
@@ -59,8 +63,7 @@ export const register: Register = on => {
     await $.command.register({ name: 'coderabbit', description: 'Hide or show the CodeRabbit band' })
     const root = await $.session.root()
     const remote = await $.process.run(['git', 'remote', 'get-url', 'origin'], { cwd: root })
-    // CodeRabbit runs on the GitLab repos only; GitHub and Azure DevOps remotes get no band.
-    if (remote.exitCode === 0 && !/github\.com|dev\.azure\.com|visualstudio\.com/.test(remote.stdout)) {
+    if (remote.exitCode === 0 && !HOSTS_WITHOUT_CODERABBIT.test(remote.stdout)) {
       const current: Poll = { root, branch: '', dueAt: 0, fastUntil: 0, isBusy: false }
       poll = current
       void tick($, current)
@@ -79,18 +82,22 @@ export const register: Register = on => {
     return { text: isHidden ? 'CodeRabbit band shown.' : 'CodeRabbit band hidden until its counts change.' }
   })
 
-  on('tool.call', async ($, e, next) => {
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const result = await next(e)
     const current = poll
-    if (current === null) {
-      return result
-    }
-    const call = JSON.stringify(e)
-    if (e.tool === 'Bash' && /\bgit push\b/.test(call)) {
+    if (current !== null && /\bgit push\b/.test(e.command)) {
       const now = await $.clock.now()
       current.fastUntil = now + AFTER_PUSH_MS
       current.dueAt = now + TICK_MS
-    } else if (e.tool === 'mcp__gitlab__resolve_merge_request_thread' || /@coderabbitai resolve/.test(call)) {
+    }
+    return result
+  })
+
+  on('tool.call', async ($, e, next) => {
+    const result = await next(e)
+    const current = poll
+    // `@coderabbitai resolve` can go out through any GitLab MCP note tool or a glab command, so the whole call is searched.
+    if (current !== null && (e.tool === 'mcp__gitlab__resolve_merge_request_thread' || /@coderabbitai resolve/.test(JSON.stringify(e)))) {
       current.dueAt = 0
       $.clock.after(AFTER_RESOLVE_MS, () => void tick($, current))
     }
@@ -105,16 +112,15 @@ export const register: Register = on => {
     }
     const { Box, Link, Text } = $.ui.resolve(e)
     const open = openCount(shown)
-    const color = CODERABBIT_ORANGE
     const counts = SEVERITIES.filter(severity => shown.open[severity] > 0).map(severity => `${ICONS[severity]} ${shown.open[severity]}`)
     return (
       <Box flexDirection="column">
         {band}
-        <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={color}>
+        <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={CODERABBIT_ORANGE}>
           <Box>
             <Text>🐇 </Text>
-            <Text backgroundColor={color} color="white" bold> CODERABBIT </Text>
-            <Text color={color} bold> {shown.ref}</Text>
+            <Text backgroundColor={CODERABBIT_ORANGE} color="white" bold> CODERABBIT </Text>
+            <Text color={CODERABBIT_ORANGE} bold> {shown.ref}</Text>
             <Text>  {open} open{counts.length > 0 ? ` · ${counts.join('  ')}` : ''}</Text>
             {shown.nitpicks > 0 ? <Text dimColor> · 🧹 {shown.nitpicks} nits</Text> : null}
             <Box flexGrow={1} />

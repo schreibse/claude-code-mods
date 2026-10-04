@@ -107,3 +107,16 @@ test('a written PNG named relative to a leading cd is looked up there', async ($
   await $.tool.call({ tool: 'Bash', command: 'cd web && magick in.jpg out.png', description: 'Render' })
   expect(statted).toEqual(['/r/web/out.png'])
 })
+
+test('/thumb draws an oversized PNG from a shrunk copy', async ($, on) => {
+  on('env.get', () => ({ value: '/home/me' }) as never)
+  on('fs.stat', () => ({ value: { kind: 'file', mtimeMs: 1, size: 1 } }) as never)
+  on('process.run', (_, e) => {
+    const stdout = (e as { argv: string[] }).argv.includes('identify') ? '2480 3507 1625182' : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAAl21bKAAAAA1BMVEX/AAAZ4gk3AAAACklEQVQI12NgAAAAAgAB4iG8MwAAAABJRU5ErkJggg==\n'
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false } } as never
+  })
+  await $.command.run({ command: 'thumb', args: '/a/big.png' } as never)
+  const ui = await $.ui.mount({ plugin: 'quiet-bash', surface: 'terminal', component: 'CommandOutput', props: { command: 'thumb', args: '/a/big.png', text: '' } as never })
+  const image = await ui.find({ type: 'Image' })
+  expect((image as unknown as { props: { source: unknown } }).props.source).toEqual({ png: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAAl21bKAAAAA1BMVEX/AAAZ4gk3AAAACklEQVQI12NgAAAAAgAB4iG8MwAAAABJRU5ErkJggg==' })
+})

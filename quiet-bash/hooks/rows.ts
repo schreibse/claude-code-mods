@@ -145,6 +145,13 @@ export const THUMB_BOXES: Record<ThumbSize, Box> = {
   large: { columns: 120, rows: 40 },
 }
 
+// The terminal draws nothing for a PNG wider or taller than this, so bigger ones are drawn from a shrunk copy.
+export const MAX_IMAGE_SIDE = 2048
+
+export function isOversized(info: ShotInfo): boolean {
+  return info.width > MAX_IMAGE_SIDE || info.height > MAX_IMAGE_SIDE
+}
+
 // A path starts at the start of a word, so the `//host/a.png` of a URL is not one.
 const PNG_PATHS = /(?<![^\s"'`()<>[\]{},;=])[^\s"'`()<>[\]{},;:\\]+\.png\b/gi
 const LEADING_CD = /^\s*cd\s+(\S+)\s*&&/

@@ -1,11 +1,12 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Hook, Register } from 'claude-code'
 
-import { THUMB_BOXES, commandDir, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shortPath, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
+import { MAX_IMAGE_SIDE, THUMB_BOXES, commandDir, diffStat, elapsed, failure, fit, isOversized, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shortPath, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
 import type { ShotInfo, ThumbSize } from './rows'
 import type { Thumb } from '../types'
 
 const infos = new Map<string, ShotInfo | null>()
+const shrunk = new Map<string, string | null>()
 const startedAt = new Map<string, number>()
 const durations = new Map<string, number>()
 const readOnly = new Set<string>()
@@ -61,17 +62,38 @@ async function thumbsOf($: EngineInterface, call: ToolCall, result: unknown, sin
   return found
 }
 
-function drawThumbs($: EngineInterface, e: TerminalRender, list: readonly Thumb[], home: string) {
+async function shrink($: EngineInterface, file: string): Promise<string | null> {
+  const side = `${MAX_IMAGE_SIDE}x${MAX_IMAGE_SIDE}>`
+  const probe = await $.process.run(['magick', `${file}[0]`, '-resize', side, 'INLINE:PNG:-'])
+  const png = probe.stdout.trim().replace(/^data:image\/png;base64,/, '')
+  return probe.exitCode === 0 && !probe.isStdoutTruncated && png.length > 0 ? png : null
+}
+
+async function imageSource($: EngineInterface, thumb: Thumb) {
+  const fromFile = { file: thumb.file, format: 'png', generation: Math.floor(thumb.mtimeMs) } as const
+  if (!isOversized(thumb.info)) {
+    return fromFile
+  }
+  const key = `${thumb.file}@${thumb.mtimeMs}`
+  if (!shrunk.has(key)) {
+    shrunk.set(key, await shrink($, thumb.file).catch(() => null))
+  }
+  const png = shrunk.get(key)
+  return png ? { png } : fromFile
+}
+
+async function drawThumbs($: EngineInterface, e: TerminalRender, list: readonly Thumb[], home: string) {
   const { Box, Image, Link, Text } = $.ui.resolve(e)
   const room = Math.max(20, (e.viewport?.columns ?? 100) - 6)
+  const drawn = await Promise.all(list.map(async thumb => ({ thumb, source: await imageSource($, thumb) })))
   return (
     <Box flexDirection="column" paddingLeft={2}>
-      {list.map(thumb => {
+      {drawn.map(({ thumb, source }) => {
         const box = THUMB_BOXES[thumb.size]
         return (
           <Box flexDirection="column">
             <Image
-              source={{ file: thumb.file, format: 'png', generation: Math.floor(thumb.mtimeMs) }}
+              source={source}
               {...fit(thumb.info, { columns: Math.min(box.columns, room), rows: box.rows })}
               alt={thumb.file}
             />
@@ -198,7 +220,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {row}
-        {drawThumbs($, e, list, await homeOf($))}
+        {await drawThumbs($, e, list, await homeOf($))}
       </Box>
     )
   }).catch(($, e, next) => {
@@ -237,7 +259,7 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'CommandOutput', props: { command: 'thumb' } }, async ($, e, next) => {
     const list = (await read($, thumbs))[`cmd:${e.props.args.trim()}`]
-    return list && e.surface === 'terminal' ? drawThumbs($, e, list, await homeOf($)) : next(e)
+    return list && e.surface === 'terminal' ? await drawThumbs($, e, list, await homeOf($)) : next(e)
   })
 
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {

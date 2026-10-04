@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { THUMB_BOXES, commandDir, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
+import { THUMB_BOXES, commandDir, diffStat, elapsed, failure, fit, isOversized, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
 
 test('thumbnail paths link to the herdr open-file handler', () => {
   expect(openFileUrl('/tmp/a/sheet-2410.png')).toBe('http://localhost/open-file/tmp/a/sheet-2410.png')
@@ -113,4 +113,9 @@ test('an unchanged image draws only under the newest call that showed it', () =>
   const all = { read: [sheet, other], 'cmd:/a/sheet.png': [sheet] }
   expect(supersede(all, 'send', [sheet])).toEqual({ read: [other], 'cmd:/a/sheet.png': [sheet], send: [sheet] })
   expect(supersede({ read: [sheet] }, 'send', [{ ...sheet, mtimeMs: 2 }]).read).toEqual([sheet])
+})
+
+test('images over 2048 px a side are oversized', () => {
+  expect(isOversized({ width: 2048, height: 2048, bytes: 1 })).toBe(false)
+  expect(isOversized({ width: 2480, height: 3507, bytes: 1 })).toBe(true)
 })

@@ -1,0 +1,7 @@
+{
+  "name": "redact",
+  "version": "0.1.0",
+  "description": "Secrets found by betterleaks reach the model as ‹secret:…› tokens; Write/Edit restore them, other tools refuse them",
+  "author": { "name": "Stephan Schreiber" },
+  "types": "./types/index.d.ts"
+}

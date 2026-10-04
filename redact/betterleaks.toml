@@ -1,0 +1,21 @@
+# Defaults plus what they miss in config files of the user's projects.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "sentry-dsn"
+description = "Sentry DSN key"
+regex = '''https://([0-9a-f]{32})@[a-z0-9.-]*sentry\.io/\d+'''
+secretGroup = 1
+keywords = ["sentry"]
+
+[[rules]]
+id = "client-secret"
+description = "OAuth client secret too short for the generic rules"
+regex = '''(?i)client_?secret["']?\s*[:=]\s*["']?([A-Za-z0-9_~.+/=-]{8,})'''
+secretGroup = 1
+entropy = 3.0
+keywords = ["clientsecret", "client_secret"]
+[rules.allowlist]
+regexTarget = "secret"
+regexes = ['''(?i)dev|local|test|example|changeme|placeholder''']

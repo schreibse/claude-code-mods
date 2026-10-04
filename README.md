@@ -13,6 +13,7 @@ the prompt and react to tool calls. Built and used on Claude Code 2.1.287+, Linu
 | [reminder-log](reminder-log/) | Tallies the reminders Claude Code injects for the model, per session; drops the token counter and repeated commit attribution blocks | `/reminders` prints the tally | – |
 | [mr-banner](mr-banner/) | Colored card with a link under each MR/PR created, merged, approved or reviewed | – | GitLab MCP server named `gitlab`, or `glab` / `gh` |
 | [coderabbit-band](coderabbit-band/) | Band above the prompt with the open CodeRabbit threads (by severity) and nitpicks of the current branch's GitLab MR, with a link. Shows only when something is open | `/coderabbit` hides it until the counts change | `glab` logged in; GitLab remote |
+| [redact](redact/) | Secrets betterleaks finds in prompts and tool output reach the model as `‹secret:…›` tokens. Write/Edit restore the real value, every other tool refuses a token; a Write that would drop a secret is refused. Extra rules (Sentry DSN, short client secrets) in `redact/betterleaks.toml`. Not covered: images, a line cut short before the scanner sees it | – | `betterleaks` on `PATH` |
 
 The model sees exactly what it would without them: the mods change what is drawn, except
 reminder-log, which drops two kinds of injected reminders.

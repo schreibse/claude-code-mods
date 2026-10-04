@@ -57,9 +57,16 @@ test('scanner report: the secret half of a composite finding is hidden too', () 
 })
 
 test('words of a command that could name a file come out absolute', () => {
-  expect(pathWords(`cut -c1-60 a.env | head -3; jq . <'cfg.json' --file=/etc/x ~/y "$HOME/z"`, '/w', '/h')).toEqual([
-    '/w/cut', '/w/a.env', '/w/head', '/w/jq', '/w/.', '/w/cfg.json', '/etc/x', '/h/y',
+  expect(pathWords(`cut -c1-60 a.env | head -3; jq . <'cfg.json' --file=/etc/x ~/y "$HOME/z" \${HOME}/v $X/u`, '/w', '/h')).toEqual([
+    '/w/cut', '/w/a.env', '/w/head', '/w/jq', '/w/.', '/w/cfg.json', '/etc/x', '/h/y', '/h/z', '/h/v',
   ])
+})
+
+test('a relative word resolves against the directory its segment runs in', () => {
+  const files = (command: string) => pathWords(command, '/w', '/h').filter(path => path.endsWith('.env'))
+  expect(files('cd sub && cut -c1-40 .env')).toEqual(['/w/sub/.env'])
+  expect(files("cd 'sub' && cd ../other/. && cat a.env; cd - && cat b.env")).toEqual(['/w/other/a.env', '/w/sub/b.env'])
+  expect(files('cd /etc; cat c.env; cd; cat d.env; cd ~/p && cat e.env; cd $HOME/q && cat f.env')).toEqual(['/etc/c.env', '/h/d.env', '/h/p/e.env', '/h/q/f.env'])
 })
 
 test('scanner report: each line of a multi-line secret is hidden on its own', () => {

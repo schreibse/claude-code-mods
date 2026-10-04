@@ -93,14 +93,49 @@ export function judge(tool: string, inputText: string, vault: Vault): Verdict {
   return { deny: `redact: ${tool} input contains a ‹secret:…› token. Tokens stand for values you must not see; they are restored only in Write, Edit and NotebookEdit. Work on the file instead (e.g. Edit), or ask the user.` }
 }
 
-// Words of a shell command that could name a file: `cut -c1-9 a.env`, `jq . <cfg.json`, `--file=x`.
+const CD = /^cd(?:\s+(\S+))?$/
+
+function expandHome(word: string): string {
+  return word.replace(/^\$(?:HOME|\{HOME\})(?=\/|$)/, '~')
+}
+
+function absolute(path: string, dir: string, home: string): string {
+  return path.startsWith('/') ? path : path === '~' || path.startsWith('~/') ? `${home}${path.slice(1)}` : `${dir}/${path}`
+}
+
+function chdir(dir: string, home: string, target = '~'): string {
+  const parts: string[] = []
+  for (const part of absolute(expandHome(target.replace(/^(['"])(.*)\1$/, '$2')), dir, home).split('/')) {
+    if (part === '..') {
+      parts.pop()
+    } else if (part !== '' && part !== '.') {
+      parts.push(part)
+    }
+  }
+  return `/${parts.join('/')}`
+}
+
+// Words of a shell command that could name a file: `cut -c1-9 a.env`, `jq . <cfg.json`, `--file=x`,
+// each resolved against the directory its segment runs in after any `cd` before it.
 export function pathWords(command: string, cwd: string, home: string): string[] {
-  const words = command
-    .split(/[\s|;&<>()`]+/)
-    .map(word => word.replace(/^['"]|['"]$/g, '').replace(/^-[^=]*=/, ''))
-    .filter(word => word.length > 0 && !word.startsWith('-') && !word.includes('$'))
-  const absolute = (word: string) => (word.startsWith('/') ? word : word.startsWith('~/') ? `${home}${word.slice(1)}` : `${cwd}/${word}`)
-  return [...new Set(words.map(absolute))]
+  let dir = cwd
+  let previous = cwd
+  const paths: string[] = []
+  for (const segment of command.split(/&&|\|\||[;|\n]/).map(part => part.trim())) {
+    const cd = CD.exec(segment)
+    if (cd !== null) {
+      const next = cd[1] === '-' ? previous : chdir(dir, home, cd[1])
+      previous = dir
+      dir = next
+      continue
+    }
+    const words = segment
+      .split(/[\s|;&<>()`]+/)
+      .map(word => expandHome(word.replace(/^['"]|['"]$/g, '').replace(/^-[^=]*=/, '')))
+      .filter(word => word.length > 0 && !word.startsWith('-') && !word.includes('$'))
+    paths.push(...words.map(word => absolute(word, dir, home)))
+  }
+  return [...new Set(paths)]
 }
 
 export function dropped(before: string, after: string, secrets: readonly string[]): string[] {

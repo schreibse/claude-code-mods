@@ -13,6 +13,7 @@ const MAX_SOURCE_FILES = 10
 const MAX_SOURCE_BYTES = 1_000_000
 
 let hasScanner = true
+let isScanFailing = false
 let home = ''
 
 async function findSecrets($: EngineInterface, text: string): Promise<Finding[]> {
@@ -20,13 +21,29 @@ async function findSecrets($: EngineInterface, text: string): Promise<Finding[]>
     return []
   }
   const run = await $.process.run([...SCANNER, '--config', `${$.plugin.root}/betterleaks.toml`], { stdin: text }).catch(() => null)
-  if (run === null || run.exitCode !== 0) {
-    hasScanner = false
-    $.ui.toast('betterleaks failed, secrets are NOT being hidden')
+  const findings = run?.exitCode === 0 ? reportOrNull(run.stdout) : null
+  if (findings === null) {
+    if (!isScanFailing) {
+      $.ui.toast('betterleaks failed, this output is NOT redacted')
+    }
+    isScanFailing = true
     $.ui.status('off (betterleaks)')
     return []
   }
-  return parseReport(run.stdout)
+  if (isScanFailing) {
+    isScanFailing = false
+    const count = Object.keys(await read($, vault)).length
+    $.ui.status(count > 0 ? `redacted ${count}` : undefined)
+  }
+  return findings
+}
+
+function reportOrNull(stdout: string): Finding[] | null {
+  try {
+    return parseReport(stdout)
+  } catch {
+    return null
+  }
 }
 
 async function sealText($: EngineInterface, text: string, findings?: readonly Finding[]): Promise<string> {
@@ -44,7 +61,7 @@ async function sealText($: EngineInterface, text: string, findings?: readonly Fi
   for (const rule of new Set(added.map(finding => finding.rule))) {
     $.ui.toast(`hid a ${rule} value from the model`)
   }
-  if (count > 0) {
+  if (count > 0 && !isScanFailing) {
     $.ui.status(`redacted ${count}`)
   }
   return sealed
@@ -87,9 +104,10 @@ async function sealSourceFiles($: EngineInterface, call: { tool: string }): Prom
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    home = (await $.process.run(['printenv', 'HOME']).catch(() => null))?.stdout.trim() ?? ''
+    home = (await $.env.get('HOME')) ?? ''
     const probe = await $.process.run(['betterleaks', 'version']).catch(() => null)
     hasScanner = probe?.exitCode === 0
+    isScanFailing = false
     $.ui.status(undefined)
     if (!hasScanner) {
       $.ui.toast('betterleaks is not installed, secrets are NOT being hidden')

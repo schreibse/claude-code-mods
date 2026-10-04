@@ -7,16 +7,28 @@ the prompt and react to tool calls. Built and used on Claude Code 2.1.287+, Linu
 
 | Mod | What it does | Commands | Needs |
 |---|---|---|---|
-| [quiet-bash](quiet-bash/) | One-line tool rows (`✓ <description>`, red `✗ exit N` on failure, duration for calls ≥10 s); hides successful reads and Bash output; inline PNG thumbnails under rows that read or wrote a PNG | `/quiet` toggles full rows; `/thumb [big] <path>` shows a PNG | ImageMagick (`magick`) for thumbnails; a terminal with kitty graphics (see [herdr](#herdr-images-and-links)) |
+| [quiet-bash](quiet-bash/) | One-line tool rows (`✓ <description>`, red `✗ exit N` on failure, `+N −M` on edits, duration for calls ≥10 s). Hides every tool's result block (Bash output, Edit diffs, WebFetch, MCP and Agent results; interactive tools, SendUserFile and image Reads keep theirs), finished read-only rows (Read/Grep/Glob, and calls the engine ran read-only like `ls` or `git status`), collapsed tool groups unless one failed, and timed-out GitLab pipeline-wait notices. Inline PNG thumbnails under rows that read, sent or wrote a PNG, relative paths included | `/quiet` brings it all back; `/thumb [big] <path>` shows a PNG | ImageMagick (`magick`) for thumbnails; a terminal with kitty graphics (see [herdr](#herdr-images-and-links)) |
 | [quiet-spinner](quiet-spinner/) | Plain spinner words (`thinking`, `writing`, `running`) and `Took 1m 4s` instead of the whimsical ones | – | – |
-| [usage-percent](usage-percent/) | Row under the prompt: `ctx 34% \| 5h 41% \| wk 86%▲`. In Nx repos also memory (`claude.slice` + `app.slice` pressure), running `nx serve` projects and the branch's pipeline | – | `gh` / `glab` logged in for the pipeline; systemd `claude.slice` for memory |
-| [reminder-log](reminder-log/) | Tallies the reminders Claude Code injects for the model, per session; drops the token counter and repeated commit attribution blocks | `/reminders` prints the tally | – |
+| [usage-percent](usage-percent/) | Row under the prompt: `ctx 34% \| 5h 41% \| wk 86%▲`. In Nx repos also memory (`claude.slice` + `app.slice` pressure), running `nx serve` projects and the branch's pipeline (`⏸` when it waits on a manual job) | – | `gh` / `glab` logged in for the pipeline; systemd `claude.slice` for memory |
+| [reminder-log](reminder-log/) | Tallies the reminders Claude Code injects for the model, per session; drops the token counter and repeated commit attribution blocks | `/reminders` prints the tally of the last 30 days | – |
 | [mr-banner](mr-banner/) | Colored card with a link under each MR/PR created, merged, approved or reviewed | – | GitLab MCP server named `gitlab`, or `glab` / `gh` |
 | [coderabbit-band](coderabbit-band/) | Band above the prompt with the open CodeRabbit threads (by severity) and nitpicks of the current branch's GitLab MR, with a link. Shows only when something is open | `/coderabbit` hides it until the counts change | `glab` logged in; GitLab remote |
 | [redact](redact/) | Secrets in prompts and tool output reach the model as `‹secret:…›` tokens; only Write/Edit turn them back into the real value. See [redact](#redact-secrets-as-tokens) | – | `betterleaks` on `PATH` |
+| [mem-guard](mem-guard/) | Bash commands that run Node tools go into a memory-capped `claude-cmd.slice` scope. Refused, with the fix in the message: `nx affected`/`run-many` without `--parallel=1`, a pnpm script that has a `:lite` twin, jest without a worker cap, `pkill -f`/`pgrep -f` with an unbracketed pattern, `ci:local`, and heavy runs while the slice is above 75 % or under pressure. See [mem-guard](#mem-guard-memory-rules-for-bash) | – | a systemd user `claude-cmd.slice`, see [mem-guard](#mem-guard-memory-rules-for-bash) |
 
 The model sees exactly what it would without them: the mods change what is drawn, except
-reminder-log, which drops two kinds of injected reminders, and redact, which hides secrets.
+reminder-log, which drops two kinds of injected reminders, redact, which hides secrets, and mem-guard,
+which runs Node commands inside a systemd scope and refuses some with a `mem-guard: …` error.
+
+Two mods call out on their own:
+
+- **mr-banner**, when a GitLab MCP note or approval answers without the MR's link, calls
+  `get_merge_request` on the `gitlab` MCP server for the link and title. `gh`/`glab` commands
+  cost nothing extra.
+- **coderabbit-band** polls `glab` for GitLab `origin` remotes: a 60 s timer checks the branch,
+  and a fetch (`glab mr view` plus all pages of the MR's discussions) runs every minute for
+  15 min after a `git push`, every 5 min while the band shows something, every 15 min otherwise,
+  and once 5 s after a thread is resolved.
 
 ## Install
 
@@ -59,18 +71,65 @@ would not recognise it again.
 that is an existing file, up to 10 of 1 MB) is scanned whole, so `cut -c1-60 .env`,
 `cut -d= -f2` or a Read of a few lines from a PEM key still come back as tokens. Multi-line
 secrets are hidden line by line.
+Bash words resolve against the directory each segment runs in (`cd sub && cut -c1-40 .env`),
+and `~/`, `$HOME/` and `${HOME}/` expand to the home directory.
 
 **Rules.** betterleaks' defaults plus `redact/betterleaks.toml`: Sentry DSN keys, and client
 secrets too short for the generic rules. A client secret containing `dev`, `local`, `test`,
 `example`, `changeme` or `placeholder` stays visible, so local dev clients keep working in commands.
 
-**Not covered:** images; output with no file behind it, cut short (`git show HEAD:.env | cut …`,
-`printenv | cut …`); the transcript file's structured tool records, which keep real values
-(the model does not read them). The vault lives in session memory: `/exit` forgets it.
+**Not covered:**
 
-The status line shows `redacted N`; a toast names each rule the first time it hides a value.
-Without betterleaks the status line says `off` and nothing is hidden.
+- images; output with no file behind it, cut short (`git show HEAD:.env | cut …`,
+  `printenv | cut …`); the transcript file's structured tool records, which keep real values
+  (the model does not read them).
+- the cut-short pre-scan misses globs (`cut -c1-40 *.env`) and quoted paths with spaces.
+- values shorter than 8 characters are never hidden.
+- a value restored into a file by Write/Edit can be read back transformed (`base64`, `rev`,
+  `xxd`) or sent (`curl -T file`). redact keeps secrets out of the model's context by accident;
+  it is not a sandbox against a model trying to get them.
+- a subagent's report that quotes a `‹secret:…›` token is refused like any other tool call
+  carrying one.
 
+The vault lives in session memory: `/exit` forgets it.
+
+The status line shows `redacted N`: N counts vault entries, so a PEM key counts once per line.
+A toast names the rule for each new value it hides. Without betterleaks the status line says
+`off (no betterleaks)` and nothing is hidden. A betterleaks run that fails leaves that call
+unredacted (values already in the vault stay hidden): one toast per failure streak, the status
+says `off (betterleaks)`, and the next call scans again.
+
+
+## mem-guard: memory rules for Bash
+
+Every Bash command that names a Node tool (`node`, `npx`, `pnpm`, `npm`, `yarn`, `nx`, `jest`,
+`vitest`, `playwright`, `tsc`, `ngc`) runs as
+`systemd-run --user --scope --slice=claude-cmd.slice -p MemoryMax=8G -p MemorySwapMax=1G -- bash -c '…'`,
+so an overrun dies with exit 137 instead of taking the desktop down. Leading `cd … &&` stay
+outside the wrapper, so the shell's directory still moves.
+
+The rules read what each part of a command runs (after `&&`, `|`, `;`, `&`, `$( )`, inside
+`bash -c '…'`, following `cd`), never words it only mentions, so a commit message saying
+`pkill -f` passes. Not looked into: `xargs`, `make`, `eval`, scripts.
+
+**Assumes** this setup; the messages name it:
+
+- a `claude-cmd.slice` user unit. Without it systemd makes the slice with no limit of its own:
+  each command is still capped at 8G, but the headroom check has nothing to measure and stays off:
+  ```ini
+  # ~/.config/systemd/user/claude-cmd.slice
+  [Slice]
+  MemoryMax=8G
+  MemorySwapMax=1G
+  ```
+- repos whose heavy scripts have a `:lite` twin (`lint:affected:lite`, `typecheck:lite`,
+  `test:affected:lite`) and a slow `ci:local` script.
+
+## usage-percent: not covered
+
+- On GitHub only the newest workflow run of the branch is shown.
+- A remote using an SSH host alias (`git@work:org/repo`) reads as `pipe no login (work)` though
+  you are logged in.
 
 ## herdr: images and links
 
@@ -106,7 +165,9 @@ and start Claude Code there. Check it: `/thumb /path/to/some.png` should draw th
 herdr opens a ctrl+clicked link in the background with no feedback, and ignores `file://` links
 altogether. [herdr-link-toast](herdr-link-toast/) opens `http(s)` links with `xdg-open` and shows a
 toast. It also opens the path in quiet-bash's thumbnail captions, which link to
-`http://localhost/open-file/<path>` because `file://` isn't clickable in herdr. Install:
+`http://localhost/open-file/<path>` because `file://` isn't clickable in herdr. Such a link opens
+only when the path ends in `.png`; any other gets a "Could not open link" toast. Needs `python3`.
+Install:
 
 ```sh
 herdr plugin link ~/.claude/skills/herdr-link-toast
@@ -117,7 +178,7 @@ graphics protocol show the thumbnail's alt text (its path).
 
 ## Developing
 
-Each mod is `.claude-plugin/plugin.json`, `hooks/hooks.json` and `hooks/register.tsx`, plus
+Each mod is `.claude-plugin/plugin.json`, `hooks/hooks.json` and `hooks/register.ts(x)`, plus
 `types/index.d.ts` when it keeps session state. Per mod:
 
 ```sh

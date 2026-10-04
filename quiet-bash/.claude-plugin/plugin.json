@@ -1,7 +1,7 @@
 {
   "name": "quiet-bash",
   "version": "0.1.0",
-  "description": "One-line transcript rows for Bash calls and plan-file edits; /quiet toggles full rows",
+  "description": "One-line tool rows, tool output hidden, inline PNG thumbnails; /quiet shows everything, /thumb shows a PNG",
   "author": { "name": "Stephan Schreiber" },
   "types": "./types/index.d.ts"
 }

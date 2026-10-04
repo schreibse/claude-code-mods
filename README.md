@@ -9,7 +9,7 @@ the prompt and react to tool calls. Built and used on Claude Code 2.1.287+, Linu
 |---|---|---|---|
 | [quiet-bash](quiet-bash/) | One-line tool rows (`✓ <description>`, red `✗ exit N` on failure, `+N −M` on edits, duration for calls ≥10 s). Hides every tool's result block (Bash output, Edit diffs, WebFetch, MCP and Agent results; interactive tools, SendUserFile and image Reads keep theirs), finished read-only rows (Read/Grep/Glob, and calls the engine ran read-only like `ls` or `git status`), collapsed tool groups unless one failed, and timed-out GitLab pipeline-wait notices. Inline PNG thumbnails under rows that read, sent or wrote a PNG, relative paths included | `/quiet` brings it all back; `/thumb [big] <path>` shows a PNG | ImageMagick (`magick`) for thumbnails; a terminal with kitty graphics (see [herdr](#herdr-images-and-links)) |
 | [quiet-spinner](quiet-spinner/) | Plain spinner words (`thinking`, `writing`, `running`) and `Took 1m 4s` instead of the whimsical ones | – | – |
-| [usage-percent](usage-percent/) | Row under the prompt: `ctx 34% \| 5h 41% \| wk 86%▲`. In Nx repos also memory (`claude.slice` + `app.slice` pressure), running `nx serve` projects and the branch's pipeline (`⏸` when it waits on a manual job) | – | `gh` / `glab` logged in for the pipeline; systemd `claude.slice` for memory |
+| [usage-percent](usage-percent/) | Row under the prompt: `ctx 34% \| 5h 41% \| wk 86%`, yellow from 80 %, red from 95 %. In Nx repos also memory in the middle (`claude.slice` usage + `app.slice` pressure) and on the right the session's own `nx serve` projects (`▶ admin api`) and the branch's pipeline (`ci ⏳ test`, `⏸` when it waits on a manual job) | – | `gh` / `glab` logged in for the pipeline; systemd `claude.slice` for memory |
 | [reminder-log](reminder-log/) | Tallies the reminders Claude Code injects for the model, per session; drops the token counter and repeated commit attribution blocks | `/reminders` prints the tally of the last 30 days | – |
 | [mr-banner](mr-banner/) | Colored card with a link under each MR/PR created, merged, approved or reviewed | – | GitLab MCP server named `gitlab`, or `glab` / `gh` |
 | [coderabbit-band](coderabbit-band/) | Band above the prompt with the open CodeRabbit threads (by severity) and nitpicks of the current branch's GitLab MR, with a link. Shows only when something is open | `/coderabbit` hides it until the counts change | `glab` logged in; GitLab remote |
@@ -20,7 +20,7 @@ The model sees exactly what it would without them: the mods change what is drawn
 reminder-log, which drops two kinds of injected reminders, redact, which hides secrets, and mem-guard,
 which runs Node commands inside a systemd scope and refuses some with a `mem-guard: …` error.
 
-Two mods call out on their own:
+Three mods call out on their own:
 
 - **mr-banner**, when a GitLab MCP note or approval answers without the MR's link, calls
   `get_merge_request` on the `gitlab` MCP server for the link and title. `gh`/`glab` commands
@@ -29,6 +29,10 @@ Two mods call out on their own:
   and a fetch (`glab mr view` plus all pages of the MR's discussions) runs every minute for
   15 min after a `git push`, every 5 min while the band shows something, every 15 min otherwise,
   and once 5 s after a thread is resolved.
+- **usage-percent**, in Nx repos, polls every 10 s: `ps` and `pwdx` for `nx serve` processes, and
+  `docker inspect` once per container a server runs in, to read its compose project directory.
+  The pipeline (`gh run list` / `glab ci get`) is fetched when HEAD moves, 15 s after a `git push`,
+  every minute while it runs and every 5 min otherwise.
 
 ## Install
 
@@ -131,8 +135,10 @@ The rules read what each part of a command runs (after `&&`, `|`, `;`, `&`, `$( 
 ## usage-percent: not covered
 
 - On GitHub only the newest workflow run of the branch is shown.
-- A remote using an SSH host alias (`git@work:org/repo`) reads as `pipe no login (work)` though
+- A remote using an SSH host alias (`git@work:org/repo`) reads as `ci no login (work)` though
   you are logged in.
+- A server counts as the session's when it runs inside the session's root, or in a container whose
+  compose project lives there. Two sessions on one checkout both see its servers.
 
 ## herdr: images and links
 

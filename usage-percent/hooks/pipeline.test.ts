@@ -33,10 +33,18 @@ test('github runs: in progress, success, failure', () => {
   expect(githubPipeline('[]')).toBeNull()
 })
 
-test('pipeline text', () => {
-  expect(pipeline({ state: 'running', detail: 'test' })).toBe('pipe ⏳ test')
-  expect(pipeline({ state: 'passed', detail: '' })).toBe('pipe ✓')
-  expect(pipeline({ state: 'manual', detail: '' })).toBe('pipe ⏸')
-  expect(pipeline({ state: 'failed', detail: 'lint unit' })).toBe('pipe ✗ lint unit')
-  expect(pipeline({ state: 'no-login', detail: 'gitlab.example.org' })).toBe('pipe no login (gitlab.example.org)')
+const text = (pieces: readonly { text: string }[]) => pieces.map(p => p.text).join('')
+
+test('pipeline text, coloured by outcome', () => {
+  expect(text(pipeline({ state: 'running', detail: 'test' }))).toBe('ci ⏳ test')
+  expect(text(pipeline({ state: 'passed', detail: '' }))).toBe('ci ✓')
+  expect(text(pipeline({ state: 'manual', detail: '' }))).toBe('ci ⏸')
+  expect(text(pipeline({ state: 'failed', detail: 'lint unit' }))).toBe('ci ✗ lint unit')
+  expect(text(pipeline({ state: 'no-login', detail: 'gitlab.example.org' }))).toBe('ci no login (gitlab.example.org)')
+  expect(pipeline({ state: 'failed', detail: 'lint' })[1]?.tone).toBe('red')
+  expect(pipeline({ state: 'passed', detail: '' })[1]?.tone).toBe('green')
+})
+
+test('a workflow named CI adds nothing to the ci label', () => {
+  expect(text(pipeline({ state: 'running', detail: 'CI' }))).toBe('ci ⏳')
 })

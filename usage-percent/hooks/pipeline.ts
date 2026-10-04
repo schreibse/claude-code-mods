@@ -1,3 +1,6 @@
+import { dim } from './pieces'
+import type { Piece } from '../types'
+
 export type Pipeline = { state: 'running' | 'passed' | 'manual' | 'failed' | 'no-login'; detail: string }
 export type Forge = 'github' | 'gitlab'
 
@@ -51,10 +54,12 @@ export function githubPipeline(json: string): Pipeline | null {
   return { state: 'failed', detail: run.workflowName ?? '' }
 }
 
-export function pipeline(p: Pipeline): string {
+export function pipeline(p: Pipeline): Piece[] {
   if (p.state === 'no-login') {
-    return `pipe no login (${p.detail})`
+    return [dim(`ci no login (${p.detail})`)]
   }
   const glyph = { running: '⏳', passed: '✓', manual: '⏸', failed: '✗' }[p.state]
-  return `pipe ${glyph}${p.detail === '' ? '' : ` ${p.detail}`}`
+  const tone = p.state === 'failed' ? 'red' : p.state === 'passed' ? 'green' : 'dim'
+  const detail = p.detail.toLowerCase() === 'ci' ? '' : p.detail
+  return [dim('ci '), { text: detail === '' ? glyph : `${glyph} ${detail}`, tone }]
 }

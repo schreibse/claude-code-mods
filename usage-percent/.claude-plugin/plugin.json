@@ -1,7 +1,7 @@
 {
   "name": "usage-percent",
   "version": "0.1.0",
-  "description": "A row under the prompt: context, 5-hour and weekly usage; in Nx repos also memory, running nx serve projects and the branch's pipeline",
+  "description": "A row under the prompt: context, 5-hour and weekly usage; in Nx repos also memory, the session's nx serve projects and the branch's pipeline",
   "author": { "name": "Stephan Schreiber" },
   "types": "./types/index.d.ts"
 }

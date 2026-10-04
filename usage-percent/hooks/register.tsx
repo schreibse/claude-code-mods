@@ -1,41 +1,43 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit } from 'claude-code'
 
-import { memory, pressureAvg10, servedProjects } from './machine'
+import { containerOf, directoriesOf, isUnder, memory, pressureAvg10, servedIn, serveProcesses } from './machine'
+import type { ServeProcess } from './machine'
+import { dim, joined, toneOf } from './pieces'
 import { forgeOf, hostOf, githubPipeline, gitlabPipeline, pipeline } from './pipeline'
 import type { Pipeline } from './pipeline'
+import type { Piece, Tone } from '../types'
 
 const WINDOWS: Record<string, string> = { five_hour: '5h', seven_day: 'wk' }
 const TICK_MS = 10_000
 const PIPELINE_RUNNING_MS = 60_000
 const PIPELINE_IDLE_MS = 300_000
 const AFTER_PUSH_MS = 15_000
-const SECTION_GAP = '  |  '
+const COLORS: Record<Exclude<Tone, 'dim'>, string> = { yellow: 'yellow', red: 'red', green: 'green' }
 
 const usageLine = atom({ plugin: 'usage-percent', key: 'line' } as const, null)
 const nxLine = atom({ plugin: 'usage-percent', key: 'nx' } as const, null)
 
-type Poll = { root: string; uid: string; head: string; pipelineAt: number; pushedAt: number; pipe: Pipeline | null; isBusy: boolean }
+type Poll = { root: string; uid: string; head: string; pipelineAt: number; pushedAt: number; pipe: Pipeline | null; composeDirs: Map<string, string>; isBusy: boolean }
 
-function figure(label: string, percent: number): string {
-  const marker = percent >= 95 ? '✖' : percent >= 80 ? '▲' : ''
-  return `${label} ${Math.round(percent)}%${marker}`
+function figure(label: string, percent: number): Piece[] {
+  return [dim(`${label} `), { text: `${Math.round(percent)}%`, tone: toneOf(percent) }]
 }
 
-export function line(context: SessionContextUsage, rateLimits: readonly SessionRateLimit[]): string {
+export function line(context: SessionContextUsage, rateLimits: readonly SessionRateLimit[]): Piece[] {
   const limits = rateLimits.flatMap(limit => {
     const label = WINDOWS[limit.kind]
     return label === undefined ? [] : [figure(label, limit.percentUsed)]
   })
-  return [figure('ctx', context.percent ?? 0), ...limits].join(' | ')
+  return joined([figure('ctx', context.percent ?? 0), ...limits], ' | ')
 }
 
-async function memoryText($: EngineInterface, uid: string): Promise<string> {
+async function memoryPieces($: EngineInterface, uid: string): Promise<Piece[]> {
   const service = `/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service`
   const files = ['claude.slice/memory.current', 'claude.slice/memory.max', 'app.slice/memory.pressure']
   const contents = await Promise.all(files.map(file => $.fs.read(`${service}/${file}`))).catch(() => null)
   if (contents === null) {
-    return ''
+    return []
   }
   const [current = '', max = '', pressure = ''] = contents
   return memory(Number(current), Number(max), pressureAvg10(pressure))
@@ -61,6 +63,34 @@ async function fetchPipeline($: EngineInterface, root: string): Promise<Pipeline
   return forge === 'github' ? githubPipeline(run.stdout) : gitlabPipeline(run.stdout)
 }
 
+// A server counts when it runs in the session's tree; one in a container counts when its compose project lives there.
+async function servedHere($: EngineInterface, poll: Poll, processes: readonly ServeProcess[]): Promise<string[]> {
+  if (processes.length === 0) {
+    return []
+  }
+  const pwdx = await $.process.run(['pwdx', ...processes.map(p => p.pid)])
+  const dirOf = directoriesOf(pwdx.stdout)
+  for (const { pid } of processes) {
+    if (isUnder(dirOf.get(pid) ?? '', poll.root)) {
+      continue
+    }
+    const container = containerOf(await $.fs.read(`/proc/${pid}/cgroup`).catch(() => ''))
+    if (container !== null) {
+      dirOf.set(pid, await composeDir($, poll, container))
+    }
+  }
+  return servedIn(poll.root, processes, dirOf)
+}
+
+async function composeDir($: EngineInterface, poll: Poll, container: string): Promise<string> {
+  if (!poll.composeDirs.has(container)) {
+    const label = '{{index .Config.Labels "com.docker.compose.project.working_dir"}}'
+    const run = await $.process.run(['docker', 'inspect', '--format', label, container], { timeoutMs: 10_000 }).catch(() => null)
+    poll.composeDirs.set(container, run?.exitCode === 0 ? run.stdout.trim() : '')
+  }
+  return poll.composeDirs.get(container) ?? ''
+}
+
 // Memory and servers every tick; the pipeline only when HEAD moved, after a push, or when its interval is up.
 async function tick($: EngineInterface, poll: Poll) {
   if (poll.isBusy) {
@@ -68,9 +98,9 @@ async function tick($: EngineInterface, poll: Poll) {
   }
   poll.isBusy = true
   try {
-    const [mem, ps, head] = await Promise.all([
-      memoryText($, poll.uid),
-      $.process.run(['ps', '-eo', 'args']),
+    const [middle, ps, head] = await Promise.all([
+      memoryPieces($, poll.uid),
+      $.process.run(['ps', '-eo', 'pid,args']),
       $.process.run(['git', 'rev-parse', 'HEAD'], { cwd: poll.root }).then(r => r.stdout.trim()),
     ])
     const now = await $.clock.now()
@@ -82,10 +112,9 @@ async function tick($: EngineInterface, poll: Poll) {
       poll.pushedAt = 0
       poll.pipe = await fetchPipeline($, poll.root).catch(() => null)
     }
-    const served = servedProjects(ps.stdout)
-    const parts = [mem, served.length > 0 ? `serve ${served.join(' ')}` : '', poll.pipe ? pipeline(poll.pipe) : '']
-    const text = parts.filter(Boolean).join(SECTION_GAP)
-    await update($, nxLine, () => text || null)
+    const served = await servedHere($, poll, serveProcesses(ps.stdout)).catch(() => [])
+    const right = joined([served.length > 0 ? [dim(`▶ ${served.join(' ')}`)] : [], poll.pipe ? pipeline(poll.pipe) : []], ' · ')
+    await update($, nxLine, () => (middle.length > 0 || right.length > 0 ? { middle, right } : null))
   } finally {
     poll.isBusy = false
   }
@@ -102,7 +131,7 @@ export const register: Register = on => {
     const root = await $.session.root()
     if (await $.fs.exists(`${root}/nx.json`)) {
       const uid = (await $.process.run(['id', '-u'])).stdout.trim()
-      const current: Poll = { root, uid, head: '', pipelineAt: 0, pushedAt: 0, pipe: null, isBusy: false }
+      const current: Poll = { root, uid, head: '', pipelineAt: 0, pushedAt: 0, pipe: null, composeDirs: new Map(), isBusy: false }
       poll = current
       void tick($, current)
       $.clock.every(TICK_MS, () => void tick($, current))
@@ -124,18 +153,29 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
-    const text = [await read($, usageLine), await read($, nxLine)].filter(Boolean).join(SECTION_GAP)
+    const left = (await read($, usageLine)) ?? []
+    const nx = await read($, nxLine)
     const hint = await next(e)
-    if (text === '') {
+    if (left.length === 0 && nx === null) {
       return hint
     }
 
     const { Box, Text } = $.ui.resolve(e)
+    const draw = (pieces: readonly Piece[]) => (
+      <Text>
+        {pieces.map(piece => (piece.tone === 'dim' ? <Text dimColor>{piece.text}</Text> : <Text color={COLORS[piece.tone]}>{piece.text}</Text>))}
+      </Text>
+    )
 
+    // Equal-width outer zones keep the memory zone centred.
     return (
       <Box flexDirection="column">
         {hint}
-        <Text dimColor>{text}</Text>
+        <Box>
+          <Box width={0} flexGrow={1}>{draw(left)}</Box>
+          {nx && nx.middle.length > 0 ? <Box>{draw(nx.middle)}</Box> : null}
+          <Box width={0} flexGrow={1} justifyContent="flex-end">{draw(nx?.right ?? [])}</Box>
+        </Box>
       </Box>
     )
   })

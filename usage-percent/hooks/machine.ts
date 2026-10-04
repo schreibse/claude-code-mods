@@ -1,18 +1,42 @@
+import { dim, toneOf } from './pieces'
+import type { Piece } from '../types'
+
 const GIB = 1024 ** 3
 
-export function memory(current: number, max: number, pressureAvg10: number): string {
-  const used = Number.isFinite(max) ? `mem ${(current / GIB).toFixed(1)}/${Math.round(max / GIB)}G` : `mem ${(current / GIB).toFixed(1)}G`
+export type ServeProcess = { pid: string; project: string }
+
+export function memory(current: number, max: number, pressureAvg10: number): Piece[] {
+  const used = { text: `${(current / GIB).toFixed(1)}G`, tone: Number.isFinite(max) ? toneOf((current / max) * 100) : 'dim' } as const
   if (pressureAvg10 <= 0) {
-    return used
+    return [dim('mem '), used]
   }
-  return `${used} psi ${Math.round(pressureAvg10)}%${pressureAvg10 >= 50 ? '▲' : ''}`
+  return [dim('mem '), used, dim(' psi '), { text: `${Math.round(pressureAvg10)}%`, tone: toneOf(pressureAvg10, 20, 50) }]
 }
 
 export function pressureAvg10(pressureFile: string): number {
   return Number(/^some avg10=([\d.]+)/m.exec(pressureFile)?.[1] ?? 0)
 }
 
-export function servedProjects(psArgs: string): string[] {
-  const names = [...psArgs.matchAll(/\bnx (?:serve ([\w.-]+)|run ([\w.-]+):serve\b)/g)].map(m => m[1] ?? m[2] ?? '')
-  return [...new Set(names.filter(Boolean))].sort()
+// From `ps -eo pid,args`.
+export function serveProcesses(ps: string): ServeProcess[] {
+  return [...ps.matchAll(/^\s*(\d+)\s.*?\bnx (?:serve ([\w.-]+)|run ([\w.-]+):serve\b)/gm)].map(m => ({ pid: m[1] ?? '', project: m[2] ?? m[3] ?? '' }))
+}
+
+// From `pwdx <pid>...`: `1234: /dir` per line.
+export function directoriesOf(pwdx: string): Map<string, string> {
+  return new Map([...pwdx.matchAll(/^(\d+): (.+)$/gm)].map(m => [m[1] ?? '', m[2] ?? '']))
+}
+
+// From `/proc/<pid>/cgroup`: the Docker container the process runs in, if any.
+export function containerOf(cgroup: string): string | null {
+  return /\/docker-([0-9a-f]+)\.scope/.exec(cgroup)?.[1] ?? null
+}
+
+export function isUnder(dir: string, root: string): boolean {
+  return dir === root || dir.startsWith(`${root}/`)
+}
+
+export function servedIn(root: string, processes: readonly ServeProcess[], dirOf: ReadonlyMap<string, string>): string[] {
+  const names = processes.filter(p => isUnder(dirOf.get(p.pid) ?? '', root)).map(p => p.project)
+  return [...new Set(names)].sort()
 }

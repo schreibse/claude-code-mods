@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { dropped, judge, parseReport, seal, tokensIn, unseal, unsealFields } from './vault'
+import { dropped, judge, parseReport, pathWords, seal, tokensIn, unseal, unsealFields } from './vault'
 
 const KEY = 'AKIAZ7Q3EXAMPLE4FAKE'
 const finding = { rule: 'aws-access-token', secret: KEY }
@@ -54,4 +54,16 @@ test('scanner report: the secret half of a composite finding is hidden too', () 
   const report = [{ RuleID: 'aws-access-token', Secret: KEY, ComponentSets: [{ components: [{ RuleID: 'aws-secret-access-key', Secret: secret }] }] }]
   expect(parseReport(JSON.stringify(report))).toEqual([finding, { rule: 'aws-secret-access-key', secret }])
   expect(parseReport(JSON.stringify([{ ...finding, RuleID: 'x', Secret: KEY, ComponentSets: null }]))).toEqual([{ rule: 'x', secret: KEY }])
+})
+
+test('words of a command that could name a file come out absolute', () => {
+  expect(pathWords(`cut -c1-60 a.env | head -3; jq . <'cfg.json' --file=/etc/x ~/y "$HOME/z"`, '/w', '/h')).toEqual([
+    '/w/cut', '/w/a.env', '/w/head', '/w/jq', '/w/.', '/w/cfg.json', '/etc/x', '/h/y',
+  ])
+})
+
+test('scanner report: each line of a multi-line secret is hidden on its own', () => {
+  const pem = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\nBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj\n-----END PRIVATE KEY-----'
+  const secrets = parseReport(JSON.stringify([{ RuleID: 'private-key', Secret: pem }])).map(found => found.secret)
+  expect(secrets).toEqual([pem, 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASC', 'BKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj'])
 })

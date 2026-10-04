@@ -5,7 +5,7 @@ useDefault = true
 [[rules]]
 id = "sentry-dsn"
 description = "Sentry DSN key"
-regex = '''https://([0-9a-f]{32})@[a-z0-9.-]*sentry\.io/\d+'''
+regex = '''https://([0-9a-f]{32})@'''
 secretGroup = 1
 keywords = ["sentry"]
 

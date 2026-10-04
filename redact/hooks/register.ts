@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { dropped, judge, parseReport, seal, unsealFields } from './vault'
+import { dropped, judge, parseReport, pathWords, seal, unsealFields } from './vault'
 import type { Finding } from './vault'
 
 const vault = atom({ plugin: 'redact', key: 'vault' } as const, {})
@@ -9,7 +9,11 @@ const vault = atom({ plugin: 'redact', key: 'vault' } as const, {})
 const SEALED_DOORS = new Set(['prompt', 'command', 'tool-result', 'tool-message', 'delivery', 'attachment', 'hook-context'])
 const SCANNER = ['betterleaks', 'stdin', '--no-banner', '--log-level', 'error', '--report-format', 'json', '--report-path', '-', '--exit-code', '0']
 
+const MAX_SOURCE_FILES = 10
+const MAX_SOURCE_BYTES = 1_000_000
+
 let hasScanner = true
+let home = ''
 
 async function findSecrets($: EngineInterface, text: string): Promise<Finding[]> {
   if (!hasScanner || text.length === 0) {
@@ -37,8 +41,8 @@ async function sealText($: EngineInterface, text: string, findings?: readonly Fi
       return result.vault
     }),
   ).length
-  for (const finding of added) {
-    $.ui.toast(`hid a ${finding.rule} value from the model`)
+  for (const rule of new Set(added.map(finding => finding.rule))) {
+    $.ui.toast(`hid a ${rule} value from the model`)
   }
   if (count > 0) {
     $.ui.status(`redacted ${count}`)
@@ -65,8 +69,25 @@ async function sealBlocks($: EngineInterface, blocks: readonly Block[]): Promise
   )
 }
 
+// Output cut short (`cut -c1-60`, Read with a limit) loses the context a rule needs, so the
+// whole source file is scanned first and its values are hidden wherever they show up.
+async function sealSourceFiles($: EngineInterface, call: { tool: string }): Promise<void> {
+  const input = call as { tool: string; file_path?: unknown; path?: unknown; command?: unknown }
+  const candidates =
+    input.tool === 'Bash' && typeof input.command === 'string'
+      ? pathWords(input.command, await $.session.cwd(), home)
+      : [input.file_path, input.path].filter((path): path is string => typeof path === 'string')
+  for (const path of candidates.slice(0, MAX_SOURCE_FILES)) {
+    const stat = await $.fs.stat(path).catch(() => null)
+    if (stat?.kind === 'file' && stat.size <= MAX_SOURCE_BYTES) {
+      await sealText($, await $.fs.read(path).catch(() => ''))
+    }
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    home = (await $.process.run(['printenv', 'HOME']).catch(() => null))?.stdout.trim() ?? ''
     const probe = await $.process.run(['betterleaks', 'version']).catch(() => null)
     hasScanner = probe?.exitCode === 0
     $.ui.status(undefined)
@@ -93,6 +114,7 @@ export const register: Register = on => {
     if ('deny' in verdict) {
       return { deny: verdict.deny }
     }
+    await sealSourceFiles($, e)
     const call = verdict.restore ? unsealFields(e, known) : e
 
     // A whole-file Write written from memory can silently leave out a value the model never saw.

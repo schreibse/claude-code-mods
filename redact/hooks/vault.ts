@@ -31,8 +31,15 @@ export function parseReport(stdout: string): Finding[] {
   const report = JSON.parse(stdout || '[]') as ReportItem[]
   return report
     .flatMap(item => [item, ...(item.ComponentSets ?? []).flatMap(set => set.components ?? [])])
+    .flatMap(item => [item, ...linesOf(item)])
     .filter(item => (item.Secret ?? '').length >= MIN_SECRET_LENGTH)
     .map(item => ({ rule: item.RuleID ?? 'secret', secret: item.Secret ?? '' }))
+}
+
+// A multi-line value (a PEM key) is also hidden line by line, since a partial read never holds it whole.
+function linesOf(item: ReportItem): ReportItem[] {
+  const lines = (item.Secret ?? '').split(/\r?\n/).map(line => line.trim())
+  return lines.length < 2 ? [] : lines.filter(line => !/^-----.*-----$/.test(line)).map(line => ({ RuleID: item.RuleID, Secret: line }))
 }
 
 // Known values are replaced wherever they show up: the scanner may only recognise one next to its name.
@@ -84,6 +91,16 @@ export function judge(tool: string, inputText: string, vault: Vault): Verdict {
     return { restore: false }
   }
   return { deny: `redact: ${tool} input contains a ‹secret:…› token. Tokens stand for values you must not see; they are restored only in Write, Edit and NotebookEdit. Work on the file instead (e.g. Edit), or ask the user.` }
+}
+
+// Words of a shell command that could name a file: `cut -c1-9 a.env`, `jq . <cfg.json`, `--file=x`.
+export function pathWords(command: string, cwd: string, home: string): string[] {
+  const words = command
+    .split(/[\s|;&<>()`]+/)
+    .map(word => word.replace(/^['"]|['"]$/g, '').replace(/^-[^=]*=/, ''))
+    .filter(word => word.length > 0 && !word.startsWith('-') && !word.includes('$'))
+  const absolute = (word: string) => (word.startsWith('/') ? word : word.startsWith('~/') ? `${home}${word.slice(1)}` : `${cwd}/${word}`)
+  return [...new Set(words.map(absolute))]
 }
 
 export function dropped(before: string, after: string, secrets: readonly string[]): string[] {

@@ -1,8 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit } from 'claude-code'
 
-import { forgeOf, hostOf, githubPipeline, gitlabPipeline, memory, pipeline, pressureAvg10, servedProjects } from './nx'
-import type { Pipeline } from './nx'
+import { memory, pressureAvg10, servedProjects } from './machine'
+import { forgeOf, hostOf, githubPipeline, gitlabPipeline, pipeline } from './pipeline'
+import type { Pipeline } from './pipeline'
 
 const WINDOWS: Record<string, string> = { five_hour: '5h', seven_day: 'wk' }
 const TICK_MS = 10_000
@@ -31,9 +32,13 @@ export function line(context: SessionContextUsage, rateLimits: readonly SessionR
 
 async function memoryText($: EngineInterface, uid: string): Promise<string> {
   const service = `/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service`
-  const read = await $.process.run(['cat', `${service}/claude.slice/memory.current`, `${service}/claude.slice/memory.max`, `${service}/app.slice/memory.pressure`])
-  const [current = '', max = '', ...pressure] = read.stdout.split('\n')
-  return read.exitCode === 0 ? memory(Number(current), Number(max), pressureAvg10(pressure.join('\n'))) : ''
+  const files = ['claude.slice/memory.current', 'claude.slice/memory.max', 'app.slice/memory.pressure']
+  const contents = await Promise.all(files.map(file => $.fs.read(`${service}/${file}`))).catch(() => null)
+  if (contents === null) {
+    return ''
+  }
+  const [current = '', max = '', pressure = ''] = contents
+  return memory(Number(current), Number(max), pressureAvg10(pressure))
 }
 
 async function fetchPipeline($: EngineInterface, root: string): Promise<Pipeline | null> {

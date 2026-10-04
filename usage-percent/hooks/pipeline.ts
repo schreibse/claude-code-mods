@@ -1,24 +1,5 @@
-export type Pipeline = { state: 'running' | 'passed' | 'failed' | 'no-login'; detail: string }
+export type Pipeline = { state: 'running' | 'passed' | 'manual' | 'failed' | 'no-login'; detail: string }
 export type Forge = 'github' | 'gitlab'
-
-const GIB = 1024 ** 3
-
-export function memory(current: number, max: number, pressureAvg10: number): string {
-  const used = Number.isFinite(max) ? `mem ${(current / GIB).toFixed(1)}/${Math.round(max / GIB)}G` : `mem ${(current / GIB).toFixed(1)}G`
-  if (pressureAvg10 <= 0) {
-    return used
-  }
-  return `${used} psi ${Math.round(pressureAvg10)}%${pressureAvg10 >= 50 ? '▲' : ''}`
-}
-
-export function pressureAvg10(pressureFile: string): number {
-  return Number(/^some avg10=([\d.]+)/m.exec(pressureFile)?.[1] ?? 0)
-}
-
-export function servedProjects(psArgs: string): string[] {
-  const names = [...psArgs.matchAll(/\bnx (?:serve ([\w.-]+)|run ([\w.-]+):serve\b)/g)].map(m => m[1] ?? m[2] ?? '')
-  return [...new Set(names.filter(Boolean))].sort()
-}
 
 export function hostOf(remoteUrl: string): string {
   return /^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?([^/:]+)/i.exec(remoteUrl.trim())?.[1] ?? ''
@@ -46,8 +27,9 @@ export function gitlabPipeline(json: string): Pipeline | null {
     case 'failed':
       return { state: 'failed', detail: jobs.filter(job => job.status === 'failed').map(job => job.name ?? '').join(' ') }
     case 'success':
-    case 'manual':
       return { state: 'passed', detail: '' }
+    case 'manual':
+      return { state: 'manual', detail: '' }
     default:
       return null
   }
@@ -73,6 +55,6 @@ export function pipeline(p: Pipeline): string {
   if (p.state === 'no-login') {
     return `pipe no login (${p.detail})`
   }
-  const glyph = p.state === 'running' ? '⏳' : p.state === 'passed' ? '✓' : '✗'
+  const glyph = { running: '⏳', passed: '✓', manual: '⏸', failed: '✗' }[p.state]
   return `pipe ${glyph}${p.detail === '' ? '' : ` ${p.detail}`}`
 }

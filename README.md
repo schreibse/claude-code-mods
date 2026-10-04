@@ -13,10 +13,10 @@ the prompt and react to tool calls. Built and used on Claude Code 2.1.287+, Linu
 | [reminder-log](reminder-log/) | Tallies the reminders Claude Code injects for the model, per session; drops the token counter and repeated commit attribution blocks | `/reminders` prints the tally | – |
 | [mr-banner](mr-banner/) | Colored card with a link under each MR/PR created, merged, approved or reviewed | – | GitLab MCP server named `gitlab`, or `glab` / `gh` |
 | [coderabbit-band](coderabbit-band/) | Band above the prompt with the open CodeRabbit threads (by severity) and nitpicks of the current branch's GitLab MR, with a link. Shows only when something is open | `/coderabbit` hides it until the counts change | `glab` logged in; GitLab remote |
-| [redact](redact/) | Secrets betterleaks finds in prompts and tool output reach the model as `‹secret:…›` tokens. Write/Edit restore the real value, every other tool refuses a token; a Write that would drop a secret is refused. Files a call names (Read, Grep, words of a Bash command) are scanned whole first, so `cut`, `head` or a partial Read still hide their values. Extra rules (Sentry DSN, short client secrets) in `redact/betterleaks.toml`. Not covered: images, output with no file behind it cut short (`git show … | cut`) | – | `betterleaks` on `PATH` |
+| [redact](redact/) | Secrets in prompts and tool output reach the model as `‹secret:…›` tokens; only Write/Edit turn them back into the real value. See [redact](#redact-secrets-as-tokens) | – | `betterleaks` on `PATH` |
 
 The model sees exactly what it would without them: the mods change what is drawn, except
-reminder-log, which drops two kinds of injected reminders.
+reminder-log, which drops two kinds of injected reminders, and redact, which hides secrets.
 
 ## Install
 
@@ -40,6 +40,37 @@ New sessions pick them up; a running one needs `/exit` and `claude --continue`.
 **This repo is the skills folder itself**, so `.gitignore` ignores everything and re-includes each
 mod: a new mod needs a `!/<name>/` line or git won't see it. `.claude-plugin/types/` is generated
 by the engine and stays untracked.
+
+## redact: secrets as tokens
+
+betterleaks scans every prompt and tool result before it reaches the model. Each value it flags
+becomes `‹secret:xxxxxxxx›` and stays hidden wherever it appears later, even where the scanner
+would not recognise it again.
+
+| The model's call | What happens |
+|---|---|
+| Write, Edit, NotebookEdit with a token | the real value is written to the file |
+| Write that would drop a secret the file holds | refused: use Edit |
+| Agent, SendMessage, TodoWrite with a token | passed on as the token |
+| Any other tool with a token (Bash, WebFetch, MCP …) | refused, so the value never leaves |
+| A token the mod no longer knows (after a restart) | refused, never restored wrongly |
+
+**Cut-short output.** Before Read, Grep or Bash runs, every file the call names (Bash: each word
+that is an existing file, up to 10 of 1 MB) is scanned whole, so `cut -c1-60 .env`,
+`cut -d= -f2` or a Read of a few lines from a PEM key still come back as tokens. Multi-line
+secrets are hidden line by line.
+
+**Rules.** betterleaks' defaults plus `redact/betterleaks.toml`: Sentry DSN keys, and client
+secrets too short for the generic rules. A client secret containing `dev`, `local`, `test`,
+`example`, `changeme` or `placeholder` stays visible, so local dev clients keep working in commands.
+
+**Not covered:** images; output with no file behind it, cut short (`git show HEAD:.env | cut …`,
+`printenv | cut …`); the transcript file's structured tool records, which keep real values
+(the model does not read them). The vault lives in session memory: `/exit` forgets it.
+
+The status line shows `redacted N`; a toast names each rule the first time it hides a value.
+Without betterleaks the status line says `off` and nothing is hidden.
+
 
 ## herdr: images and links
 

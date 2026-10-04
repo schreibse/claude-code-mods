@@ -9,7 +9,7 @@ export function keepsResult(tool: string, output: unknown): boolean {
   return ENGINE_DRAWN.has(tool) || tool === 'SendUserFile' || (tool === 'Read' && (output as { type?: string } | undefined)?.type === 'image')
 }
 
-export function bytes(n: number): string {
+function bytes(n: number): string {
   return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`
 }
 
@@ -29,7 +29,7 @@ export function isQuietRead(tool: string, isFlaggedReadOnly: boolean): boolean {
   return isFlaggedReadOnly || READ_TOOLS.has(tool)
 }
 
-export const ENGINE_DRAWN = new Set(['AskUserQuestion', 'ExitPlanMode', 'EnterPlanMode', 'TodoWrite'])
+const ENGINE_DRAWN = new Set(['AskUserQuestion', 'ExitPlanMode', 'EnterPlanMode', 'TodoWrite'])
 
 type Fields = {
   command?: string
@@ -44,8 +44,8 @@ type Fields = {
   caption?: string
 }
 
-export function shortPath(path: string): string {
-  return path.replace(/^\/home\/[^/]+/, '~')
+export function shortPath(path: string, home: string): string {
+  return home !== '' && (path === home || path.startsWith(`${home}/`)) ? `~${path.slice(home.length)}` : path
 }
 
 // herdr's ctrl+click ignores file:// and a `Link` takes only https or localhost, so the herdr plugin local.link-toast opens this URL's path.
@@ -70,17 +70,18 @@ function firstText(input: unknown): string | undefined {
   return typeof value === 'string' ? value.split('\n')[0] : undefined
 }
 
-export function summary(tool: string, input: unknown): string | null {
+export function summary(tool: string, input: unknown, home: string): string | null {
   if (ENGINE_DRAWN.has(tool)) {
     return null
   }
   const fields = (input ?? {}) as Fields
-  const path = fields.file_path === undefined ? undefined : shortPath(fields.file_path)
+  const path = fields.file_path === undefined ? undefined : shortPath(fields.file_path, home)
   switch (tool) {
     case 'Bash':
       return fields.description ?? fields.command?.split('\n')[0] ?? ''
     case 'Read': {
-      const range = fields.offset === undefined ? '' : `:${fields.offset}-${fields.offset + (fields.limit ?? 0)}`
+      const { offset, limit } = fields
+      const range = offset === undefined ? '' : `:${offset}-${limit === undefined ? '' : offset + limit}`
       return `Read ${path}${range}`
     }
     case 'Edit':
@@ -114,7 +115,7 @@ export function diffStat(output: unknown): string {
   return added + removed === 0 ? '' : `+${added} −${removed}`
 }
 
-export const SLOW_MS = 10_000
+const SLOW_MS = 10_000
 
 export function elapsed(ms: number | undefined): string {
   if (ms === undefined || ms < SLOW_MS) {
@@ -144,11 +145,33 @@ export const THUMB_BOXES: Record<ThumbSize, Box> = {
   large: { columns: 120, rows: 40 },
 }
 
-const PNG_FILE = /\.png$/i
-const PNG_PATHS = /(?:\/|~\/)[^\s"'`()<>[\]{},;:\\]+\.png\b/gi
+// A path starts at the start of a word, so the `//host/a.png` of a URL is not one.
+const PNG_PATHS = /(?<![^\s"'`()<>[\]{},;=])[^\s"'`()<>[\]{},;:\\]+\.png\b/gi
+const LEADING_CD = /^\s*cd\s+(\S+)\s*&&/
 
-export function isPng(file: string): boolean {
-  return PNG_FILE.test(file)
+function resolve(dir: string, home: string, target: string): string {
+  const raw = target.replace(/^(['"])(.*)\1$/, '$2')
+  const path = raw === '~' || raw.startsWith('~/') ? home + raw.slice(1) : raw.startsWith('/') ? raw : `${dir}/${raw}`
+  const parts: string[] = []
+  for (const part of path.split('/')) {
+    if (part === '..') {
+      parts.pop()
+    } else if (part !== '' && part !== '.') {
+      parts.push(part)
+    }
+  }
+  return `/${parts.join('/')}`
+}
+
+// Where a command's relative paths point: the session cwd, moved by any `cd X &&` it starts with.
+export function commandDir(command: string, cwd: string, home: string): string {
+  let dir = cwd
+  let rest = command
+  for (let cd = LEADING_CD.exec(rest); cd !== null; cd = LEADING_CD.exec(rest)) {
+    dir = resolve(dir, home, cd[1] ?? '~')
+    rest = rest.slice(cd[0].length)
+  }
+  return dir
 }
 
 // Terminal cells are about twice as tall as wide, so a picture keeps its shape at half the rows.
@@ -163,18 +186,19 @@ export function fit(info: { width: number; height: number }, box: Box): Box {
   return { columns: clamp(columns), rows: clamp(rows) }
 }
 
-export function pngPathsIn(text: string, home: string): string[] {
-  const paths = text.replace(/\\\//g, '/').match(PNG_PATHS) ?? []
-  return [...new Set(paths.map(path => (path.startsWith('~/') ? home + path.slice(1) : path)))]
+// `text` is JSON, so its escapes (`\n`, `\"`, `\/`) are undone before paths are cut out of it.
+export function pngPathsIn(text: string, dir: string, home: string): string[] {
+  const paths = text.replace(/\\\//g, '/').replace(/\\[nrt"\\]/g, ' ').match(PNG_PATHS) ?? []
+  return [...new Set(paths.map(path => resolve(dir, home, path)))]
 }
 
-export function thumbArgs(args: string): { file: string; size: ThumbSize } | { pasted: true } {
+export function thumbArgs(args: string, home: string): { file: string; size: ThumbSize } | { pasted: true } {
   const trimmed = args.trim()
   const file = trimmed.replace(/^big\s+/, '')
   if (/^\[Image #\d+\]$/.test(file)) {
     return { pasted: true }
   }
-  return { file, size: file === trimmed ? 'small' : 'large' }
+  return { file: file.replace(/^~(?=\/|$)/, home), size: file === trimmed ? 'small' : 'large' }
 }
 
 // The newest call showing an unchanged image keeps it, so a Read checked before SendUserFile does not draw it twice.

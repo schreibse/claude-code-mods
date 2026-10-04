@@ -1,13 +1,19 @@
 import { test, expect } from 'claude-code/testing'
+import type { TestBody } from 'claude-code/testing'
 
 const ROW = { isRunning: false, isErrored: false, isInterrupted: false }
 
+function engineToolRow(on: Parameters<TestBody>[1]) {
+  on('env.get', () => ({ value: '/home/me' }) as never)
+  on('ui.render', { component: 'ToolUse' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine row</Text>
+  })
+}
+
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`a failed Bash call is one line on ${surface}`, async ($, on) => {
-    on('ui.render', { component: 'ToolUse' }, ($, e) => {
-      const { Text } = $.ui.resolve(e)
-      return <Text>engine row</Text>
-    })
+    engineToolRow(on)
     const ui = await $.ui.mount({
       plugin: 'quiet-bash', surface, component: 'ToolUse',
       props: { ...ROW, tool_use_id: 't1', tool: 'Bash', input: { command: 'x', description: 'Run the tests' }, isErrored: true, output: 'Exit code 1\nFAIL' },
@@ -18,10 +24,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 
   test(`a finished Bash call leads with its status glyph on ${surface}`, async ($, on) => {
-    on('ui.render', { component: 'ToolUse' }, ($, e) => {
-      const { Text } = $.ui.resolve(e)
-      return <Text>engine row</Text>
-    })
+    engineToolRow(on)
     const ui = await $.ui.mount({
       plugin: 'quiet-bash', surface, component: 'ToolUse',
       props: { ...ROW, tool_use_id: 't4', tool: 'Bash', input: { command: 'x', description: 'Build admin' }, output: { stdout: '' } },
@@ -32,10 +35,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 
   test(`a finished Read draws nothing, a failed one stays on ${surface}`, async ($, on) => {
-    on('ui.render', { component: 'ToolUse' }, ($, e) => {
-      const { Text } = $.ui.resolve(e)
-      return <Text>engine row</Text>
-    })
+    engineToolRow(on)
     const props = { ...ROW, tool_use_id: 't5', tool: 'Read', input: { file_path: '/a/x.ts' }, output: { type: 'text' } }
     const quiet = await $.ui.mount({ plugin: 'quiet-bash', surface, component: 'ToolUse', props })
     expect(await quiet.find({ type: 'Text' })).toBeUndefined()
@@ -44,10 +44,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 
   test(`a shot gets a header with its caption on ${surface}`, async ($, on) => {
-    on('ui.render', { component: 'ToolUse' }, ($, e) => {
-      const { Text } = $.ui.resolve(e)
-      return <Text>engine row</Text>
-    })
+    engineToolRow(on)
     on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: 'no magick' } }) as never)
     const ui = await $.ui.mount({
       plugin: 'quiet-bash', surface, component: 'ToolUse',
@@ -58,10 +55,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 
   test(`interactive tools stay the engine's on ${surface}`, async ($, on) => {
-    on('ui.render', { component: 'ToolUse' }, ($, e) => {
-      const { Text } = $.ui.resolve(e)
-      return <Text>engine row</Text>
-    })
+    engineToolRow(on)
     const ui = await $.ui.mount({
       plugin: 'quiet-bash', surface, component: 'ToolUse',
       props: { ...ROW, tool_use_id: 't3', tool: 'AskUserQuestion', input: {} },
@@ -98,4 +92,18 @@ test('a group holding an image read unfolds, a plain read group stays hidden', a
     props: { calls: [{ ...call, tool_use_id: 'g2', input: { file_path: '/a/x.ts' }, output: { type: 'text' } }], isActive: false, isExpanded: false },
   })
   expect(await plain.find({ text: 'folded' })).toBeUndefined()
+})
+
+test('a written PNG named relative to a leading cd is looked up there', async ($, on) => {
+  const statted: string[] = []
+  on('env.get', () => ({ value: '/home/me' }) as never)
+  on('session.cwd', () => ({ value: '/r' }) as never)
+  on('clock.now', () => ({ value: 0 }) as never)
+  on('fs.stat', (_$, e) => {
+    statted.push(e.path)
+    return { value: null } as never
+  })
+  on('tool.call', () => ({ isError: false, isReadOnly: false, result: { stdout: '' } }) as never)
+  await $.tool.call({ tool: 'Bash', command: 'cd web && magick in.jpg out.png', description: 'Render' })
+  expect(statted).toEqual(['/r/web/out.png'])
 })

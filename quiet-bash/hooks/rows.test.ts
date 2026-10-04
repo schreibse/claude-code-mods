@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { THUMB_BOXES, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
+import { THUMB_BOXES, commandDir, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
 
 test('thumbnail paths link to the herdr open-file handler', () => {
   expect(openFileUrl('/tmp/a/sheet-2410.png')).toBe('http://localhost/open-file/tmp/a/sheet-2410.png')
@@ -19,14 +19,17 @@ test('durations show only for slow calls', () => {
 })
 
 test('one-line summaries per tool', () => {
-  expect(summary('Bash', { command: 'ls', description: 'List files' })).toBe('List files')
-  expect(summary('Bash', {})).toBe('')
-  expect(summary('Read', { file_path: '/home/me/x.ts', offset: 10, limit: 5 })).toBe('Read ~/x.ts:10-15')
-  expect(summary('Edit', { file_path: '/r/.claude/plans/p.md' })).toBe('Updated plan p.md')
-  expect(summary('Edit', { file_path: '/r/src/a.ts' })).toBe('Edit /r/src/a.ts')
-  expect(summary('WebFetch', { url: 'https://code.claude.com/docs' })).toBe('Fetch code.claude.com/docs')
-  expect(summary('mcp__claude_ai_Claude_Docs__read', { id: 'abc\nmore' })).toBe('Claude_Docs read: abc')
-  expect(summary('AskUserQuestion', {})).toBeNull()
+  expect(summary('Bash', { command: 'ls', description: 'List files' }, '/home/me')).toBe('List files')
+  expect(summary('Bash', {}, '/home/me')).toBe('')
+  expect(summary('Read', { file_path: '/home/me/x.ts', offset: 10, limit: 5 }, '/home/me')).toBe('Read ~/x.ts:10-15')
+  expect(summary('Read', { file_path: '/home/me/x.ts', offset: 100 }, '/home/me')).toBe('Read ~/x.ts:100-')
+  expect(summary('Read', { file_path: '/home/meg/x.ts' }, '/home/me')).toBe('Read /home/meg/x.ts')
+  expect(summary('Read', { file_path: '/home/other/x.ts' }, '/home/me')).toBe('Read /home/other/x.ts')
+  expect(summary('Edit', { file_path: '/r/.claude/plans/p.md' }, '/home/me')).toBe('Updated plan p.md')
+  expect(summary('Edit', { file_path: '/r/src/a.ts' }, '/home/me')).toBe('Edit /r/src/a.ts')
+  expect(summary('WebFetch', { url: 'https://code.claude.com/docs' }, '/home/me')).toBe('Fetch code.claude.com/docs')
+  expect(summary('mcp__claude_ai_Claude_Docs__read', { id: 'abc\nmore' }, '/home/me')).toBe('Claude_Docs read: abc')
+  expect(summary('AskUserQuestion', {}, '/home/me')).toBeNull()
 })
 
 test('images are shots, other files are not', () => {
@@ -79,14 +82,28 @@ test('thumbnails keep their aspect ratio inside the box', () => {
 
 test('PNG paths are found in tool text, once each', () => {
   const text = JSON.stringify({ command: 'magick a.jpg ~/shots/b.png && cp /tmp/c.png /tmp/c.png', out: 'saved to /home/me/x/d.PNG.' })
-  expect(pngPathsIn(text, '/home/me')).toEqual(['/home/me/shots/b.png', '/tmp/c.png', '/home/me/x/d.PNG'])
-  expect(pngPathsIn('no images here, notes.md', '/home/me')).toEqual([])
+  expect(pngPathsIn(text, '/r', '/home/me')).toEqual(['/home/me/shots/b.png', '/tmp/c.png', '/home/me/x/d.PNG'])
+  expect(pngPathsIn('no images here, notes.md', '/r', '/home/me')).toEqual([])
+})
+
+test('relative PNG paths resolve against the command directory, URLs are not paths', () => {
+  const text = JSON.stringify({ command: 'magick in.jpg out.png && cp ./a.png shots/b.png ../c.png', out: 'see https://x.io/d.png\n/tmp/e.png' })
+  expect(pngPathsIn(text, '/r/web', '/home/me')).toEqual(['/r/web/out.png', '/r/web/a.png', '/r/web/shots/b.png', '/r/c.png', '/tmp/e.png'])
+})
+
+test('relative paths follow the cd a command starts with', () => {
+  expect(commandDir('magick a.jpg b.png', '/r', '/home/me')).toBe('/r')
+  expect(commandDir('cd web && cd ./shots && magick a.jpg b.png', '/r', '/home/me')).toBe('/r/web/shots')
+  expect(commandDir('cd ~/x && ls', '/r', '/home/me')).toBe('/home/me/x')
+  expect(commandDir('magick a.jpg b.png && cd /tmp', '/r', '/home/me')).toBe('/r')
 })
 
 test('/thumb arguments pick the size and catch pasted images', () => {
-  expect(thumbArgs(' /a/b.png ')).toEqual({ file: '/a/b.png', size: 'small' })
-  expect(thumbArgs('big /a/b.png')).toEqual({ file: '/a/b.png', size: 'large' })
-  expect(thumbArgs('[Image #5]')).toEqual({ pasted: true })
+  expect(thumbArgs(' /a/b.png ', '/home/me')).toEqual({ file: '/a/b.png', size: 'small' })
+  expect(thumbArgs('big /a/b.png', '/home/me')).toEqual({ file: '/a/b.png', size: 'large' })
+  expect(thumbArgs('big ~/a.png', '/home/me')).toEqual({ file: '/home/me/a.png', size: 'large' })
+  expect(thumbArgs('~x/a.png', '/home/me')).toEqual({ file: '~x/a.png', size: 'small' })
+  expect(thumbArgs('[Image #5]', '/home/me')).toEqual({ pasted: true })
 })
 
 test('an unchanged image draws only under the newest call that showed it', () => {

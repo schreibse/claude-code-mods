@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Hook, Register } from 'claude-code'
 
-import { THUMB_BOXES, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isPng, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shortPath, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
+import { THUMB_BOXES, commandDir, diffStat, elapsed, failure, fit, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shortPath, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
 import type { ShotInfo, ThumbSize } from './rows'
 import type { Thumb } from '../types'
 
@@ -12,6 +12,7 @@ const readOnly = new Set<string>()
 
 type ToolUseRender = Extract<Parameters<Hook<'ui.render'>>[1], { component: 'ToolUse' }>
 type TerminalRender = Extract<Parameters<Hook<'ui.render'>>[1], { surface: 'terminal' }>
+type ToolCall = Parameters<Hook<'tool.call'>>[1]
 
 const MAX_WRITTEN_THUMBS = 3
 
@@ -29,24 +30,29 @@ async function shotInfo($: EngineInterface, file: string, mtimeMs = 0): Promise<
 
 async function thumbOf($: EngineInterface, file: string, size: ThumbSize, since = 0): Promise<Thumb | null> {
   const stat = await $.fs.stat(file).catch(() => null)
-  if (stat?.kind !== 'file' || stat.mtimeMs < since || !isPng(file)) {
+  if (stat?.kind !== 'file' || stat.mtimeMs < since || !/\.png$/i.test(file)) {
     return null
   }
   const info = await shotInfo($, file, stat.mtimeMs)
   return info && { file, size, info, mtimeMs: stat.mtimeMs }
 }
 
-// Read and SendUserFile show the PNGs they name; any other call shows PNGs it names that changed while it ran.
-async function thumbsOf($: EngineInterface, call: { tool: string }, result: unknown, since: number): Promise<Thumb[]> {
-  const fields = call as { file_path?: string; files?: string[] }
-  const named = call.tool === 'Read' ? [fields.file_path ?? ''] : call.tool === 'SendUserFile' ? (fields.files ?? []) : null
+async function homeOf($: EngineInterface): Promise<string> {
+  return (await $.env.get('HOME')) ?? ''
+}
+
+// Read and SendUserFile show the PNGs they name; any other call, MCP included, shows PNGs its text names that changed while it ran.
+async function thumbsOf($: EngineInterface, call: ToolCall, result: unknown, since: number): Promise<Thumb[]> {
+  const named = call.tool === 'Read' ? [call.file_path] : call.tool === 'SendUserFile' ? call.files : null
   if (named !== null) {
     const found = await Promise.all(named.map(file => thumbOf($, file, 'small')))
     return found.filter((thumb): thumb is Thumb => thumb !== null)
   }
-  const home = (await $.env.get('HOME')) ?? ''
+  const home = await homeOf($)
+  const cwd = await $.session.cwd()
+  const dir = call.tool === 'Bash' ? commandDir(call.command, cwd, home) : cwd
   const found: Thumb[] = []
-  for (const file of pngPathsIn(JSON.stringify([call, result]), home)) {
+  for (const file of pngPathsIn(JSON.stringify([call, result]), dir, home)) {
     const thumb = found.length < MAX_WRITTEN_THUMBS ? await thumbOf($, file, 'small', since) : null
     if (thumb) {
       found.push(thumb)
@@ -55,7 +61,7 @@ async function thumbsOf($: EngineInterface, call: { tool: string }, result: unkn
   return found
 }
 
-function drawThumbs($: EngineInterface, e: TerminalRender, list: readonly Thumb[]) {
+function drawThumbs($: EngineInterface, e: TerminalRender, list: readonly Thumb[], home: string) {
   const { Box, Image, Link, Text } = $.ui.resolve(e)
   const room = Math.max(20, (e.viewport?.columns ?? 100) - 6)
   return (
@@ -69,7 +75,7 @@ function drawThumbs($: EngineInterface, e: TerminalRender, list: readonly Thumb[
               {...fit(thumb.info, { columns: Math.min(box.columns, room), rows: box.rows })}
               alt={thumb.file}
             />
-            <Text dimColor><Link href={openFileUrl(thumb.file)} label={shortPath(thumb.file)} />{` · ${thumb.info.width}`}×{thumb.info.height}</Text>
+            <Text dimColor><Link href={openFileUrl(thumb.file)} label={shortPath(thumb.file, home)} />{` · ${thumb.info.width}`}×{thumb.info.height}</Text>
           </Box>
         )
       })}
@@ -94,7 +100,7 @@ async function identify($: EngineInterface, file: string): Promise<ShotInfo | nu
 
 async function toolRow($: EngineInterface, e: ToolUseRender, engineRow: () => ReturnType<Parameters<Hook<'ui.render'>>[2]>) {
   const { tool, input, isRunning, isErrored, isInterrupted, output } = e.props
-  const title = summary(tool, input)
+  const title = summary(tool, input, await homeOf($))
   if (title === null || (await read($, isLoud))) {
     return engineRow()
   }
@@ -150,7 +156,7 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'thumb' }, async ($, e) => {
-    const parsed = thumbArgs(e.args)
+    const parsed = thumbArgs(e.args, await homeOf($))
     if ('pasted' in parsed) {
       return { text: 'A pasted path turns into an image attachment before /thumb sees it. Type the path instead of pasting it.' }
     }
@@ -192,7 +198,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {row}
-        {drawThumbs($, e, list)}
+        {drawThumbs($, e, list, await homeOf($))}
       </Box>
     )
   }).catch(($, e, next) => {
@@ -231,7 +237,7 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'CommandOutput', props: { command: 'thumb' } }, async ($, e, next) => {
     const list = (await read($, thumbs))[`cmd:${e.props.args.trim()}`]
-    return list && e.surface === 'terminal' ? drawThumbs($, e, list) : next(e)
+    return list && e.surface === 'terminal' ? drawThumbs($, e, list, await homeOf($)) : next(e)
   })
 
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {

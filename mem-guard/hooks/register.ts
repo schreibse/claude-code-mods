@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { crowdedRefusal, invocations, isHeavy, parsePressure, refusal, scoped } from './rules'
+import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, heavyScopes, invocations, isHeavy, isServe, parsePressure, refusal, scoped, serveRefusal, serveScopes } from './rules'
 import type { Invocation, Pressure, ScriptsByDir } from './rules'
 
 let cmdSlice = ''
@@ -40,6 +40,15 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    if (e.agentId !== undefined) {
+      const agents = await $.agent.list().catch(() => [])
+      if (agents.find(agent => agent.id === e.agentId)?.type === 'check-runner') {
+        const writes = checkRunnerRefusal(e.command)
+        if (writes !== null) {
+          return { deny: `mem-guard: ${writes}` }
+        }
+      }
+    }
     const calls = invocations(e.command, { cwd: await $.session.cwd(), home })
     const refused = refusal(calls, await scriptsOf($, calls))
     if (refused !== null) {
@@ -50,6 +59,15 @@ export const register: Register = on => {
       const crowded = pressure === null ? null : crowdedRefusal(pressure)
       if (crowded !== null) {
         return { deny: `mem-guard: ${crowded}` }
+      }
+      const ps = await $.process.run(['ps', '-eo', 'cgroup:250=,args=', '--cols', '600']).catch(() => null)
+      const servers = ps?.exitCode === 0 && isServe(calls) ? serveRefusal(serveScopes(ps.stdout)) : null
+      if (servers !== null) {
+        return { deny: `mem-guard: ${servers}` }
+      }
+      const busy = ps?.exitCode === 0 ? concurrencyRefusal(heavyScopes(ps.stdout)) : null
+      if (busy !== null) {
+        return { deny: `mem-guard: ${busy}` }
       }
     }
     return next({ ...e, command: scoped(e.command) })

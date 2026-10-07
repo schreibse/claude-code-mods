@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { crowdedRefusal, invocations, isHeavy, parsePressure, refusal, scoped, segments } from './rules'
+import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, heavyScopes, invocations, isHeavy, isServe, parsePressure, refusal, scoped, segments, serveRefusal, serveScopes } from './rules'
 
 const GIB = 1024 ** 3
 const shell = { cwd: '/repo', home: '/home/u' }
@@ -115,4 +115,79 @@ test('cgroup files parse; an unlimited or unreadable slice gives no reading', ()
   expect(parsePressure('4294967296\n', '8589934592\n', 'some avg10=12.50 avg60=0.00 avg300=0.00 total=1\nfull avg10=0.00')).toEqual({ usedBytes: 4 * GIB, maxBytes: 8 * GIB, psiAvg10: 12.5 })
   expect(parsePressure('1', 'max', 'some avg10=0.00')).toBeNull()
   expect(parsePressure('', '', '')).toBeNull()
+})
+
+const slice = '0::/user.slice/user-1000.slice/user@1000.service/claude.slice/claude-cmd.slice'
+const ps = (rows: ReadonlyArray<readonly [string, string]>) => rows.map(([scope, args]) => `${slice}/${scope}   ${args}`).join('\n')
+
+test('heavy scopes: test runners, builds and nx tasks count once per scope; the daemon and a dev server do not', () => {
+  expect(heavyScopes(ps([
+    ['run-p1.scope', '/usr/bin/node-24 /repo/node_modules/nx/dist/src/daemon/server/start.js'],
+    ['run-p1.scope', '/usr/bin/node-24 /repo/node_modules/nx/dist/src/project-graph/plugins/isolation/plugin-worker.js'],
+    ['run-p2.scope', 'node /home/u/.npm-global/bin/pnpm nx serve api'],
+    ['run-p2.scope', 'node /repo/node_modules/nx/dist/bin/run-executor.js'],
+    ['run-p3.scope', 'bash -c npx nx run ui:test --runInBand'],
+    ['run-p3.scope', '/usr/bin/node-24 /repo/node_modules/nx/dist/bin/run-executor.js'],
+    ['run-p3.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'],
+    ['run-p4.scope', '/usr/bin/node-24 /repo/node_modules/playwright/lib/common/process.js'],
+  ]))).toBe(2)
+  expect(heavyScopes('0::/user.slice/user-1000.slice/user@1000.service/app.slice/ec-admin-serve.service   node nx/dist/bin/run-executor.js')).toBe(0)
+  expect(heavyScopes('')).toBe(0)
+})
+
+test('dev servers are counted per scope, apart from heavy commands', () => {
+  expect(serveScopes(ps([
+    ['run-p1.scope', 'node /home/u/.npm-global/bin/pnpm nx serve api'],
+    ['run-p1.scope', 'node /repo/node_modules/nx/dist/bin/run-executor.js'],
+    ['run-p2.scope', 'bash -c cd /repo && pnpm nx serve members > /tmp/x/members.log 2>&1'],
+    ['run-p3.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'],
+  ]))).toBe(2)
+  expect(serveScopes('')).toBe(0)
+})
+
+test('a third dev server is refused; serving is recognised however it is spelled', () => {
+  const serve = (command: string) => isServe(invocations(command, shell))
+  expect(serve('pnpm nx serve admin')).toBe(true)
+  expect(serve('cd /repo && npx nx run members:serve:development > /tmp/log 2>&1')).toBe(true)
+  expect(serve('pnpm run serve')).toBe(true)
+  expect(serve('pnpm nx build admin')).toBe(false)
+  expect(serveRefusal(1)).toBeNull()
+  expect(serveRefusal(2)).toContain('2 dev servers')
+})
+
+test('a third heavy command waits, with the count', () => {
+  expect(concurrencyRefusal(0)).toBeNull()
+  expect(concurrencyRefusal(1)).toBeNull()
+  expect(concurrencyRefusal(2)).toContain('2 heavy commands')
+})
+
+test('a check-runner may run checks and log to /tmp, nothing that changes files, git or servers', () => {
+  for (const command of [
+    'npx nx run ui:test --runInBand > /tmp/x/log 2>&1; echo "EXIT=$?" >> /tmp/x/log',
+    'pnpm run lint:affected:lite',
+    'npx playwright test record-modal --config apps/x/playwright.config.ts --reporter=line',
+    'grep -q "^EXIT=" /tmp/x/log',
+    'journalctl --user -u ec-admin-serve --since "-2min" --no-pager | tail -3',
+    'git status --short',
+    'git diff --stat',
+    'rm -f /tmp/x/log',
+  ]) {
+    expect(checkRunnerRefusal(command)).toBeNull()
+  }
+  for (const [command, reason] of [
+    ['git checkout -- libs/a.ts', 'git'],
+    ['git restore libs/a.ts', 'git'],
+    ['git -C repo stash', 'git'],
+    ["sed -i 's/a/b/' libs/a.ts", 'in place'],
+    ['npx prettier --write libs/a.ts', 'rewrites'],
+    ['npx eslint --fix libs/a.ts', 'rewrites'],
+    ['systemctl --user stop ec-admin-serve', 'server'],
+    ['docker restart ec-api', 'server'],
+    ['kill 1234', 'server'],
+    ['echo x > libs/a.ts', 'outside /tmp'],
+    ['cat a | tee libs/a.ts', 'outside /tmp'],
+    ['cp /tmp/a.bak libs/a.ts', 'outside /tmp'],
+  ] as const) {
+    expect(checkRunnerRefusal(command)).toContain(reason)
+  }
 })

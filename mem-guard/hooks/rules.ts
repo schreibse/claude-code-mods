@@ -194,3 +194,67 @@ export function parsePressure(current: string, max: string, pressure: string): P
   const psiAvg10 = Number(/^some avg10=([\d.]+)/m.exec(pressure)?.[1] ?? NaN)
   return [usedBytes, maxBytes, psiAvg10].every(Number.isFinite) ? { usedBytes, maxBytes, psiAvg10 } : null
 }
+
+const MAX_HEAVY_AT_ONCE = 2
+// A test runner, a build or an nx task; the nx daemon and a dev server stay out, they live for hours.
+const HEAVY_PROCESS =
+  /\/jest(?:-cli)?\/bin\/|jest-worker\/build\/workers|\/vitest\/|playwright\/(?:cli\.js|lib\/common\/process)|\/typescript\/(?:bin|lib)\/tsc\b|\/compiler-cli\/bundles\/src\/bin\/ngc|nx\/dist\/bin\/run-executor\.js/
+const SERVE = /\bnx(?:\.js)?\s+serve\b|:serve(?::\S+)?(?:\s|$)/
+
+/** Each scope in claude-cmd.slice with its processes' args, from `ps -eo cgroup=,args=`. */
+function scopesOf(ps: string): string[][] {
+  const scopes = new Map<string, string[]>()
+  for (const row of ps.split('\n')) {
+    const match = /\/claude-cmd\.slice\/(run-[^\s/]+\.scope)\S*\s+(.*)$/.exec(row)
+    if (match) {
+      scopes.set(match[1], [...(scopes.get(match[1]) ?? []), match[2]])
+    }
+  }
+  return [...scopes.values()]
+}
+
+/** Heavy commands running in claude-cmd.slice, one per scope. */
+export function heavyScopes(ps: string): number {
+  return scopesOf(ps).filter(args => !args.some(arg => SERVE.test(arg)) && args.some(arg => HEAVY_PROCESS.test(arg))).length
+}
+
+/** Dev servers running in claude-cmd.slice, one per scope. */
+export function serveScopes(ps: string): number {
+  return scopesOf(ps).filter(args => args.some(arg => SERVE.test(arg))).length
+}
+
+export function isServe(calls: readonly Invocation[]): boolean {
+  return calls.some(({ call, script }) => SERVE.test(call) || (script !== null && /^serve\b/.test(script)))
+}
+
+// The API and one app: a third dev server took the slice to 11 of 11.5G (2026-10-04).
+const MAX_SERVES_AT_ONCE = 2
+
+export function serveRefusal(running: number): string | null {
+  return running < MAX_SERVES_AT_ONCE
+    ? null
+    : `${running} dev servers are already running (at most ${MAX_SERVES_AT_ONCE}: the API and one app). Stop one by its port first (fuser -k 4700/tcp).`
+}
+
+export function concurrencyRefusal(running: number): string | null {
+  return running < MAX_HEAVY_AT_ONCE
+    ? null
+    : `${running} heavy commands are already running (at most ${MAX_HEAVY_AT_ONCE} at once). Wait for one to finish.`
+}
+
+const RUNNER_WRITES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/(?:^|[\s;&|(])git\s+(?:-[Cc]\s+\S+\s+|-\S+\s+)*(?:checkout|restore|reset|stash|clean|commit|push|rebase|revert|apply|cherry-pick|merge|switch|rm|mv|add)\b/, 'changes the working tree or git history'],
+  [/(?:^|[\s;&|(])sed\s+(?:\S+\s+)*?(?:-[a-zA-Z]*i|--in-place)\b/, 'edits a file in place'],
+  [/\s--(?:write|fix)(?:[=\s]|$)/, 'rewrites files'],
+  [/(?:^|[\s;&|(])(?:systemctl\s+(?:--user\s+)?(?:start|stop|restart|kill|reset-failed)|systemd-run\s.*--unit|docker(?:\s+compose)?\s+(?:start|stop|restart|kill|rm|down|up)|pkill|killall|kill|fuser\s+-k)\b/, 'starts or stops a server or process'],
+  [/(?:^|[^<>&\d])>>?(?!>)\s*(?!\/tmp\/|\/dev\/)[^\s&]/, 'writes a file outside /tmp'],
+  // `(?!-)` keeps a flag from passing for the target when the flag group backtracks.
+  [/(?:^|[\s;&|(])(?:tee|rm|touch|(?:cp|mv)(?:\s+-\S+)*\s+(?!-)\S+)(?:\s+-\S+)*\s+(?!-)(?!\/tmp\/)\S/, 'writes a file outside /tmp'],
+]
+
+/** A check-runner runs checks and reports; anything that changes files, git or servers is refused. */
+export function checkRunnerRefusal(command: string): string | null {
+  const hit = RUNNER_WRITES.find(([pattern]) => pattern.test(command))
+  return hit ? `a check-runner only runs checks: this command ${hit[1]}. Report the failure instead of fixing it.` : null
+}
+

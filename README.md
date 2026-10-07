@@ -17,10 +17,12 @@ the prompt and react to tool calls. Built and used on Claude Code 2.1.287+, Linu
 | [mem-guard](mem-guard/) | Bash commands that run Node tools go into a memory-capped `claude-cmd.slice` scope. Refused, with the fix in the message: `nx affected`/`run-many` without `--parallel=1`, a pnpm script that has a `:lite` twin, jest without a worker cap, `pkill -f`/`pgrep -f` with an unbracketed pattern, `ci:local`, heavy runs while the slice is above 75 % or under pressure, a third heavy command or a third dev server at once, and writes by a `check-runner` subagent. See [mem-guard](#mem-guard-memory-rules-for-bash) | – | Linux with systemd: a user `claude-cmd.slice`, `ps`; see [mem-guard](#mem-guard-memory-rules-for-bash) |
 | [handover](handover/) | Skill plus mod: the `handover` skill writes a one-sentence handover for a cold session to `~/.claude/handover.md`; the mod files it per session under `~/.claude/handovers/<session id>.md`, so parallel sessions in one repo never overwrite each other. A band above the prompt shows it; after `/clear` that session's sentence waits in the prompt (Tab takes it) and the next prompt spends it. A new terminal suggests nothing but lists the repo's open sentences (newest first, 14 days) | `/handover-copy` copies it and hides the band; `/handover` lists, `/handover N` puts one in the prompt | –
 | [herdr-notify](herdr-notify/) | GNOME popup when Claude waits for a permission, an answer or a new prompt (a `Notification` hook, not a plugin). Skipped while that pane is the focused one in herdr. Clicking it raises Ghostty and focuses that session's herdr pane. Hook: `"Notification": [{"matcher": "permission_prompt\|idle_prompt\|elicitation_dialog", "hooks": [{"type": "command", "command": "bash \"$HOME/.claude/skills/herdr-notify/notify.sh\""}]}]` | – | herdr, Ghostty, `notify-send`, `jq` |
+| [stack-down](stack-down/) | On `/clear` and exit, stops what the session's repo left running: its `nx` processes (with their workers) and its Docker Compose projects (`compose down`, volumes kept). Only for a session at a repo's top level (`git rev-parse --show-toplevel`); one started above the repos, such as `~/Dev`, stops nothing | – | `docker compose`, `git` |
 
 The model sees exactly what it would without them: the mods change what is drawn, except
-reminder-log, which drops two kinds of injected reminders, redact, which hides secrets, and mem-guard,
-which runs Node commands inside a systemd scope and refuses some with a `mem-guard: …` error.
+reminder-log, which drops two kinds of injected reminders, redact, which hides secrets, mem-guard,
+which runs Node commands inside a systemd scope and refuses some with a `mem-guard: …` error, and
+stack-down, which stops a repo's servers and Compose stacks when its session ends.
 
 Three mods call out on their own:
 

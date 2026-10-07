@@ -1,0 +1,1 @@
+{ "name": "stack-down", "version": "0.1.0", "description": "On /clear and exit, stops the session repo's nx processes and brings its Compose projects down." }

@@ -16,7 +16,8 @@ nothing else, so the sentence carries everything needed to start.
   session would otherwise get wrong (a rule from a review, a decision, an invariant).
 - **Where to start:** the plan file to read first, by repo-relative path.
 
-One sentence, however long; semicolons and an em dash are fine. No greeting, no "you", no list.
+One sentence, however long; semicolons and an em dash are fine. **Never start it with `!`** — the
+prompt reads a leading `!` as bash mode, so a GitLab MR opens as `MR !2376 (…)`, not `!2376 (…)`. No greeting, no "you", no list.
 Names exact: numbers, shas, paths. Nothing the next session can find faster itself (the diff, the
 commit list).
 

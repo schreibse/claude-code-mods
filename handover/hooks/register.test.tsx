@@ -40,19 +40,44 @@ test('other files leave the band away', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: SENTENCE })).toBeUndefined()
 })
 
-test('after /clear the sentence is suggested once the box takes it, and only once', async ($, on) => {
+test('after /clear the sentence is proposed until a prompt is sent, which spends it', async ($, on) => {
+  const clock = home(on)
+  const suggested: string[] = []
+  on('command.run', { command: 'clear' }, () => ({ text: '' }) as never)
+  on('prompt.submit', (_, e) => ({ text: e.text }) as never)
+  on('prompt.suggest', (_, e) => {
+    suggested.push(e.text)
+    return { isShown: true } as never
+  })
+  await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/handover.md', content: SENTENCE })
+  await $.command.run({ command: 'clear', args: '' } as never)
+  await clock.advance(1_000)
+  expect(suggested).toEqual([SENTENCE, SENTENCE])
+  await $.prompt.submit({ text: 'something else' } as never)
+  await clock.advance(5_000)
+  expect(suggested).toHaveLength(2)
+  await $.command.run({ command: 'clear', args: '' } as never)
+  await clock.advance(5_000)
+  expect(suggested).toHaveLength(2)
+})
+
+test('a fresh process offers the sentence too, and a stale one not at all', async ($, on) => {
   const clock = home(on)
   const suggested: string[] = []
   on('prompt.suggest', (_, e) => {
     suggested.push(e.text)
-    return { isShown: suggested.length > 1 } as never
+    return { isShown: true } as never
   })
   await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/handover.md', content: SENTENCE })
-  await $.classic.SessionStart({ source: 'clear' } as never)
-  await clock.advance(5_000)
-  await $.classic.SessionStart({ source: 'clear' } as never)
-  await clock.advance(5_000)
-  expect(suggested).toEqual([SENTENCE, SENTENCE])
+  await $.classic.SessionStart({ source: 'startup' } as never)
+  await clock.advance(500)
+  expect(suggested).toEqual([SENTENCE])
+  await clock.advance(60_000)
+  expect(suggested).toHaveLength(20)
+  await clock.advance(15 * 24 * 60 * 60 * 1000)
+  await $.classic.SessionStart({ source: 'startup' } as never)
+  await clock.advance(60_000)
+  expect(suggested).toHaveLength(20)
 })
 
 test('/handover-copy copies the sentence and hides the band', async ($, on) => {

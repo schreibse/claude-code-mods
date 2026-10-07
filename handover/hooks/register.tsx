@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
 import { handoverPath, isFresh, sentenceOf, storeKey } from './rules'
 import type { Handover } from '../types'
@@ -9,6 +9,29 @@ const OFFER_EVERY_MS = 500
 const OFFER_TRIES = 20
 
 const pending = atom({ plugin: 'handover', key: 'pending' } as const, null)
+
+// The key of the sentence last offered in the box; the next prompt sent spends it.
+let offered: string | null = null
+
+async function offer($: EngineInterface): Promise<void> {
+  const key = storeKey(await $.session.root())
+  const stored = (await $.store.get(key)) as Handover | undefined
+  if (!isFresh(stored, await $.clock.now())) {
+    return
+  }
+  await update($, pending, () => null)
+  offered = key
+  // The box refuses while the /clear's own turn still runs, and a reset of the box right after
+  // can drop a suggestion it had taken, so the same text is proposed again for a while.
+  let tries = 0
+  const timer = $.clock.every(OFFER_EVERY_MS, async () => {
+    if (++tries > OFFER_TRIES || offered !== key) {
+      timer.cancel()
+      return
+    }
+    await $.prompt.suggest({ text: stored.text })
+  })
+}
 
 export const register: Register = on => {
   on('tool.call', { tool: 'Write' }, async ($, e, next) => {
@@ -24,30 +47,26 @@ export const register: Register = on => {
     return result
   })
 
-  on('classic.SessionStart', async ($, e, next) => {
+  // A /clear fires no session.start; the box is offered once the command itself is done.
+  on('command.run', { command: 'clear' }, async ($, e, next) => {
     const result = await next(e)
-    if (e.source !== 'clear' && e.source !== 'startup') {
-      return result
-    }
-    const key = storeKey(await $.session.root())
-    const stored = (await $.store.get(key)) as Handover | undefined
-    if (!isFresh(stored, await $.clock.now())) {
-      return result
-    }
-    await update($, pending, () => null)
-    // At SessionStart the /clear itself still counts as a running turn, so the box refuses the suggestion.
-    let tries = 0
-    const offer = $.clock.every(OFFER_EVERY_MS, async () => {
-      if (++tries > OFFER_TRIES) {
-        offer.cancel()
-        return
-      }
-      if ((await $.prompt.suggest({ text: stored.text })).isShown) {
-        offer.cancel()
-        await $.store.delete(key)
-      }
-    })
+    await offer($)
     return result
+  })
+
+  on('classic.SessionStart', { source: 'startup' }, async ($, e, next) => {
+    const result = await next(e)
+    await offer($)
+    return result
+  })
+
+  on('prompt.submit', async ($, e, next) => {
+    if (offered !== null) {
+      const key = offered
+      offered = null
+      await $.store.delete(key).catch(() => undefined)
+    }
+    return next(e)
   })
 
   on('session.start', async ($, e, next) => {

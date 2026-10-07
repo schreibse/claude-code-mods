@@ -14,8 +14,8 @@ the prompt and react to tool calls. Built and used on Claude Code 2.1.287+, Linu
 | [mr-banner](mr-banner/) | Colored card with a link under each MR/PR created, merged, approved or reviewed | – | GitLab MCP server named `gitlab`, or `glab` / `gh` |
 | [coderabbit-band](coderabbit-band/) | Band above the prompt with the open CodeRabbit threads (by severity) and nitpicks of the current branch's GitLab MR, with a link. Shows only when something is open | `/coderabbit` hides it until the counts change | `glab` logged in; GitLab remote |
 | [redact](redact/) | Secrets in prompts and tool output reach the model as `‹secret:…›` tokens; only Write/Edit turn them back into the real value. See [redact](#redact-secrets-as-tokens) | – | `betterleaks` on `PATH` |
-| [mem-guard](mem-guard/) | Bash commands that run Node tools go into a memory-capped `claude-cmd.slice` scope. Refused, with the fix in the message: `nx affected`/`run-many` without `--parallel=1`, a pnpm script that has a `:lite` twin, jest without a worker cap, `pkill -f`/`pgrep -f` with an unbracketed pattern, `ci:local`, and heavy runs while the slice is above 75 % or under pressure. See [mem-guard](#mem-guard-memory-rules-for-bash) | – | a systemd user `claude-cmd.slice`, see [mem-guard](#mem-guard-memory-rules-for-bash) |
-| [handover](handover/) | Skill plus mod: the `handover` skill writes a one-sentence handover for a cold session to `~/.claude/handover.md`; a band above the prompt shows it, and after `/clear` (or a new session in the same folder, within 14 days) it waits once in the prompt as a suggestion, taken with Tab | `/handover-copy` copies it and hides the band | – |
+| [mem-guard](mem-guard/) | Bash commands that run Node tools go into a memory-capped `claude-cmd.slice` scope. Refused, with the fix in the message: `nx affected`/`run-many` without `--parallel=1`, a pnpm script that has a `:lite` twin, jest without a worker cap, `pkill -f`/`pgrep -f` with an unbracketed pattern, `ci:local`, heavy runs while the slice is above 75 % or under pressure, a third heavy command or a third dev server at once, and writes by a `check-runner` subagent. See [mem-guard](#mem-guard-memory-rules-for-bash) | – | Linux with systemd: a user `claude-cmd.slice`, `ps`; see [mem-guard](#mem-guard-memory-rules-for-bash) |
+| [handover](handover/) | Skill plus mod: the `handover` skill writes a one-sentence handover for a cold session to `~/.claude/handover.md`; the mod files it per session under `~/.claude/handovers/<session id>.md`, so parallel sessions in one repo never overwrite each other. A band above the prompt shows it; after `/clear` that session's sentence waits in the prompt (Tab takes it) and the next prompt spends it. A new terminal suggests nothing but lists the repo's open sentences (newest first, 14 days) | `/handover-copy` copies it and hides the band; `/handover` lists, `/handover N` puts one in the prompt | –
 | [herdr-notify](herdr-notify/) | GNOME popup when Claude waits for a permission, an answer or a new prompt (a `Notification` hook, not a plugin). Skipped while that pane is the focused one in herdr. Clicking it raises Ghostty and focuses that session's herdr pane. Hook: `"Notification": [{"matcher": "permission_prompt\|idle_prompt\|elicitation_dialog", "hooks": [{"type": "command", "command": "bash \"$HOME/.claude/skills/herdr-notify/notify.sh\""}]}]` | – | herdr, Ghostty, `notify-send`, `jq` |
 
 The model sees exactly what it would without them: the mods change what is drawn, except
@@ -55,6 +55,11 @@ New sessions pick them up; a running one needs `/exit` and `claude --continue`.
 **Leave a mod out:** delete or unlink its folder. **Try one for a single session:**
 `claude --plugin-dir ~/src/claude-code-mods/<mod>`.
 
+**Where they run.** Built and used only in the terminal CLI on Fedora (Linux, systemd, cgroup v2).
+The engine also loads user-scope mods in the local session the desktop app starts for its Code tab,
+and draws them there (`desktop` surface); untested here. See [Setting up](#setting-up-on-another-machine-for-ai-agents)
+for what each mod needs.
+
 **This repo is the skills folder itself**, so `.gitignore` ignores everything and re-includes each
 mod: a new mod needs a `!/<name>/` line or git won't see it. `.claude-plugin/types/` is generated
 by the engine and stays untracked.
@@ -73,8 +78,8 @@ would not recognise it again.
 | Any other tool with a token (Bash, WebFetch, MCP …) | refused, so the value never leaves |
 | A token the mod no longer knows (after a restart) | refused, never restored wrongly |
 
-**Cut-short output.** Before Read, Grep or Bash runs, every file the call names (Bash: each word
-that is an existing file, up to 10 of 1 MB) is scanned whole, so `cut -c1-60 .env`,
+**Cut-short output.** Before Bash or any tool with a `file_path`/`path` (Read, Grep, Edit …) runs, every file the call names (Bash: the first 10
+words that could be paths, files up to 1 MB) is scanned whole, so `cut -c1-60 .env`,
 `cut -d= -f2` or a Read of a few lines from a PEM key still come back as tokens. Multi-line
 secrets are hidden line by line.
 Bash words resolve against the directory each segment runs in (`cd sub && cut -c1-40 .env`),
@@ -118,6 +123,16 @@ The rules read what each part of a command runs (after `&&`, `|`, `;`, `&`, `$( 
 `bash -c '…'`, following `cd`), never words it only mentions, so a commit message saying
 `pkill -f` passes. Not looked into: `xargs`, `make`, `eval`, scripts.
 
+**At once,** counted per scope in `claude-cmd.slice` from one `ps` scan (skipped when `ps` fails):
+
+- at most 2 heavy commands (jest, vitest, Playwright, `tsc`, `ngc`, an nx task); the nx daemon and
+  dev servers don't count;
+- at most 2 dev servers (`nx serve`, `nx run x:serve`, a `serve*` script): the API and one app.
+
+**check-runner subagents** (an agent type of the owner's) only run checks: git commands that change
+the tree or history, `sed -i`, `--write`/`--fix`, starting or stopping servers or processes, and
+writes outside `/tmp` are refused with "Report the failure instead of fixing it".
+
 **Assumes** this setup; the messages name it:
 
 - a `claude-cmd.slice` user unit. Without it systemd makes the slice with no limit of its own:
@@ -131,6 +146,7 @@ The rules read what each part of a command runs (after `&&`, `|`, `;`, `&`, `$( 
   systemd turns a percentage into bytes of the machine's RAM (on 27 GiB: 8.2G and 1.1G), so the
   same unit fits any machine. Check what a machine gets:
   `systemd-run --user --scope -q -p MemoryMax=30% -- sh -c 'cat /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.max'`
+- a dev API served on port 4700: the refusal messages say `fuser -k 4700/tcp`.
 - repos whose heavy scripts have a `:lite` twin (`lint:affected:lite`, `typecheck:lite`,
   `test:affected:lite`) and a slow `ci:local` script.
 
@@ -186,6 +202,62 @@ herdr plugin link ~/.claude/skills/herdr-link-toast
 
 Without herdr, in plain kitty or Ghostty, none of this is needed. Terminals without the kitty
 graphics protocol show the thumbnail's alt text (its path).
+
+## Setting up on another machine (for AI agents)
+
+Read before installing for someone. The mods were written for one machine; several carry its names
+and need Linux.
+
+**1. Check the host.** Mods need Claude Code 2.1.287+. They load in the terminal CLI and, from
+`~/.claude/skills`, in a desktop app's local Code-tab session. A desktop-app session can also be
+given a folder through `CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of `~/.claude/settings.json`.
+Nothing here has been tried in the desktop app, VS Code, JetBrains, macOS, WSL or native Windows:
+say so to the person instead of promising it works.
+
+**2. Pick mods by platform.**
+
+| Works anywhere | Needs Linux | Never on macOS or Windows |
+|---|---|---|
+| quiet-spinner, reminder-log, mr-banner, coderabbit-band, redact (with `betterleaks`), handover; usage-percent's `ctx/5h/wk` and pipeline parts | usage-percent's memory and dev-server parts (cgroup v2, `/proc`, `pwdx`; they stay empty elsewhere) | **mem-guard**: it wraps every Node command in `systemd-run`, so without systemd every `node`/`pnpm`/`nx` call fails. Leave it out. herdr-notify, herdr-link-toast: Linux, herdr, Ghostty, GNOME |
+
+- **Windows:** quiet-bash, redact and handover read POSIX paths (`/`, `~`). There, quiet-bash
+  thumbnails and redact's Bash pre-scan find nothing, and handover leaves spent files behind.
+- **Surfaces:** quiet-bash thumbnails draw only in a terminal with kitty graphics (kitty, Ghostty).
+  Bands and the usage row show in the terminal and the desktop app, not in VS Code or on mobile.
+  `/handover-copy` can't copy from the desktop app.
+
+**3. Adapt to the OS you are on.** The mods do not detect the OS; you are running on it, so adapt
+the person's copy and test it there. The plugin API has no OS call: on Windows `$.env.get('OS')` is
+`Windows_NT`, elsewhere `uname -s` says `Darwin` or `Linux`. Known gaps:
+
+- **mem-guard** off Linux: leave it out. To keep its command-only rules (jest worker cap, `:lite`,
+  `pkill -f`, `ci:local`), skip `scoped()` and the `ps`/cgroup checks when `systemd-run` is missing.
+- **handover** on Windows: `HOME` may be unset (`USERPROFILE`), and spent sentences are removed
+  with `rm`.
+- **quiet-bash, redact** on Windows: path parsing knows `/` and `~` only, not `C:\…`.
+- **usage-percent** on macOS: no `pwdx` (`lsof -a -d cwd -p <pid>` instead); the memory zone needs
+  cgroup v2 and stays empty.
+- **herdr-notify, herdr-link-toast**: Linux, herdr and GNOME only; another OS needs its own
+  notifier, not a port.
+
+Write each OS change as its own commit with a test, so it can come back upstream.
+
+**4. Replace the owner's names.** Names in this README and in the messages are examples from the
+owner's repos; use the person's own. The API project there is `ec-api`, not `api`, and the
+dev-server rules only work with the real project names: read them from the repo
+(`npx nx show projects`).
+
+| Mod | Owner-specific | Where |
+|---|---|---|
+| mem-guard | `claude-cmd.slice` and its 30 % / 4 % limits; port 4700; `:lite` scripts; `ci:local` "~45 min"; the `check-runner` agent type; 2 heavy commands, 2 dev servers | `hooks/rules.ts`, `hooks/register.ts` |
+| usage-percent | `claude.slice` (usage) and `app.slice` (pressure) under the user manager; Nx repos only (`nx.json`) | `hooks/register.tsx` |
+| mr-banner, coderabbit-band, quiet-bash | the GitLab MCP server named `gitlab` (`mcp__gitlab__…`) | `hooks/*.ts(x)` |
+| coderabbit-band, usage-percent | any remote that isn't GitHub (or Azure) is taken for GitLab | `hooks/register.tsx` |
+| herdr-notify | Ghostty's desktop entry `com.mitchellh.ghostty` | `notify.sh` |
+
+**5. Install and check.** Install as above, then run `claude plugin validate <mod>` and
+`claude plugin test <mod>` for each mod you install. Start a new session and check what the person
+should now see: the usage row, a tool row with `✓`, and for redact, `redacted 0` in the status line.
 
 ## Developing
 

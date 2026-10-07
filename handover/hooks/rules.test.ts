@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { MAX_AGE_MS, handoverPath, isFresh, sentenceOf, storeKey } from './rules'
+import { MAX_AGE_MS, choicesFor, handoverPath, isFresh, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
 
 test('the sentence is one line, without quote markers', () => {
   expect(sentenceOf('\n> PR #146 merged as 5fd98a4;\n> next is #132.\n')).toBe('PR #146 merged as 5fd98a4; next is #132.')
@@ -12,13 +12,22 @@ test('a sentence never starts with the bash-mode prefix', () => {
 })
 
 test('a handover is offered for two weeks', () => {
-  expect(isFresh({ text: 'x', at: 0 }, MAX_AGE_MS - 1)).toBe(true)
-  expect(isFresh({ text: 'x', at: 0 }, MAX_AGE_MS)).toBe(false)
-  expect(isFresh({ text: '', at: 0 }, 1)).toBe(false)
+  expect(isFresh({ text: 'x', at: 0, root: '/r' }, MAX_AGE_MS - 1)).toBe(true)
+  expect(isFresh({ text: 'x', at: 0, root: '/r' }, MAX_AGE_MS)).toBe(false)
+  expect(isFresh({ text: '', at: 0, root: '/r' }, 1)).toBe(false)
   expect(isFresh(undefined, 1)).toBe(false)
 })
 
-test('paths and keys', () => {
+test('paths and keys are per session', () => {
   expect(handoverPath('/home/me')).toBe('/home/me/.claude/handover.md')
-  expect(storeKey('/r/repo')).toBe('handover:/r/repo')
+  expect(sessionPath('/home/me', 's1')).toBe('/home/me/.claude/handovers/s1.md')
+  expect(storeKey('s1')).toBe('handover:s1')
+  expect(sessionIdOf('handover:s1')).toBe('s1')
+  expect(sessionIdOf('other')).toBeNull()
+})
+
+test('the choices are this root\'s fresh sentences, newest first', () => {
+  const entry = (key: string, at: number, root = '/r/repo') => ({ key, handover: { text: key, at, root } })
+  const entries = [entry('a', 10), entry('b', 30), entry('c', 20, '/r/other'), entry('d', -MAX_AGE_MS)]
+  expect(choicesFor(entries, '/r/repo', 40).map(e => e.key)).toEqual(['b', 'a'])
 })

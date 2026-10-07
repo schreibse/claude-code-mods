@@ -29,8 +29,10 @@ must keep notifications rows to ids and counts because the owner role reads them
 ## Steps
 
 1. Bring the plan file up to date first: it is what the next session reads.
-2. Write the sentence, and nothing else, with the Write tool to `~/.claude/handover.md`
-   (overwrite it). The handover mod picks it up from there: a band above the prompt (`/handover-copy`
-   copies it), and after `/clear` the sentence waits in the prompt as a suggestion (Tab takes it).
+2. Write the sentence, and nothing else, with the Write tool to `~/.claude/handover.md` (overwrite
+   it). The handover mod files it under `~/.claude/handovers/<session id>.md`, one per session, so
+   parallel sessions never overwrite each other. It shows a band above the prompt (`/handover-copy`
+   copies it), and after `/clear` this session's sentence waits in the prompt (Tab takes it). A new
+   terminal lists the repo's open sentences instead; `/handover N` puts one in the prompt.
 3. In chat, show it as a quote under "Handover for a new session:", then say in one line what is
    left to clean up (a local branch, a worktree) and ask before deleting any of it.

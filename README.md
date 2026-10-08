@@ -7,23 +7,23 @@ the prompt and react to tool calls. Built and used on Claude Code 2.1.287+, Linu
 
 | Mod | What it does | Commands | Needs |
 |---|---|---|---|
-| [quiet-bash](quiet-bash/) | One-line tool rows (`✓ <description>`, red `✗ exit N` on failure, `+N −M` on edits, duration for calls ≥10 s). Hides every tool's result block (Bash output, Edit diffs, WebFetch, MCP and Agent results; interactive tools, SendUserFile and image Reads keep theirs), finished read-only rows (Read/Grep/Glob, and calls the engine ran read-only like `ls` or `git status`, and every Claude in Chrome step but `navigate`), collapsed tool groups unless one failed, and timed-out GitLab pipeline-wait notices. Inline PNG thumbnails under rows that read, sent or wrote a PNG, relative paths included | `/quiet` brings it all back; `/thumb [big] <path>` shows a PNG | ImageMagick (`magick`) for thumbnails; a terminal with kitty graphics (see [herdr](#herdr-images-and-links)) |
-| [quiet-spinner](quiet-spinner/) | Plain spinner words (`thinking`, `writing`, `running`) and `Took 1m 4s` instead of the whimsical ones | – | – |
-| [usage-percent](usage-percent/) | Row under the prompt: `ctx 34% \| 5h 41% \| wk 86%`, yellow from 80 %, red from 95 %. In Nx repos also memory in the middle (`claude.slice` usage + `app.slice` pressure) and on the right the session's own `nx serve` projects (`▶ admin api`) and the branch's pipeline (`ci ⏳ test`, `⏸` when it waits on a manual job) | – | `gh` / `glab` logged in for the pipeline; systemd `claude.slice` for memory |
-| [reminder-log](reminder-log/) | Tallies the reminders Claude Code injects for the model, per session; drops the token counter and repeated commit attribution blocks | `/reminders` prints the tally of the last 30 days | – |
+| [quiet-bash](quiet-bash/) | One-line tool rows (`✓ <description>`, red `✗ exit N` on failure, `+N −M` on edits, duration for calls ≥10 s). Hides every tool's result block (Bash output, Edit diffs, WebFetch, MCP and Agent results; interactive tools, SendUserFile and image Reads keep theirs), finished read-only rows (Read/Grep/Glob, and calls the engine ran read-only like `ls` or `git status`, and every Claude in Chrome step but `navigate`), collapsed tool groups unless one failed, and timed-out GitLab pipeline-wait notices. Inline PNG thumbnails under rows that read, sent or wrote a PNG (at most 3 written ones per call), relative paths included; a group holding a thumbnail stays open, even under `/quiet` | `/quiet` brings it all back; `/thumb [big] <path>` shows a PNG (relative to the session's directory) as `thumb #N: <path>` | ImageMagick (`magick`) for thumbnails; a terminal with kitty graphics (see [herdr](#herdr-images-and-links)) |
+| [quiet-spinner](quiet-spinner/) | Plain spinner words (`thinking`, `writing`, `running`, `waiting`, `preparing`) and `Took 1m 4s` instead of the whimsical ones | – | – |
+| [usage-percent](usage-percent/) | Row under the prompt: `ctx 34% \| 5h 41% \| wk 86%`, yellow from 80 %, red from 95 %. In Nx repos also memory in the middle (`claude.slice` usage + `app.slice` pressure, yellow from 20 %, red from 50 %) and on the right the session's own `nx serve` projects (`▶ admin api`; a bare `nx serve` or `run-many -t serve` shows `▶ serve`) and the branch's pipeline (`ci ⏳ test`, `⏸` when it waits on a manual job or an approval; none for Azure remotes) | – | `gh` / `glab` logged in for the pipeline; systemd `claude.slice` for memory |
+| [reminder-log](reminder-log/) | Tallies the reminders Claude Code injects for the model, per session; drops the token counter and repeated commit attribution blocks (sent again after a compaction) | `/reminders` prints the tally of the last 30 days | – |
 | [mr-banner](mr-banner/) | Colored card with a link under each MR/PR created, merged, approved or reviewed | – | GitLab MCP server named `gitlab`, or `glab` / `gh` |
 | [coderabbit-band](coderabbit-band/) | Band above the prompt with the open CodeRabbit threads (by severity) and nitpicks of the current branch's GitLab MR, with a link. Shows only when something is open | `/coderabbit` hides it until the counts change | `glab` logged in; GitLab remote |
 | [redact](redact/) | Secrets in prompts and tool output reach the model as `‹secret:…›` tokens; only Write/Edit turn them back into the real value. See [redact](#redact-secrets-as-tokens) | – | `betterleaks` on `PATH` |
-| [mem-guard](mem-guard/) | Bash commands that run Node tools go into a memory-capped `claude-cmd.slice` scope. Refused, with the fix in the message: `nx affected`/`run-many` without `--parallel=1`, a pnpm script that has a `:lite` twin, jest without a worker cap, `pkill -f`/`pgrep -f` with an unbracketed pattern, `ci:local`, heavy runs while the slice is above 75 % or under pressure, a third heavy command or a third dev server at once, and writes by a `check-runner` subagent. See [mem-guard](#mem-guard-memory-rules-for-bash) | – | Linux with systemd: a user `claude-cmd.slice`, `ps`; see [mem-guard](#mem-guard-memory-rules-for-bash) |
-| [handover](handover/) | Skill plus mod: the `handover` skill writes a one-sentence handover for a cold session to `~/.claude/handover.md`; the mod files it per session under `~/.claude/handovers/<session id>.md`, so parallel sessions in one repo never overwrite each other. A band above the prompt shows it; after `/clear` that session's sentence waits in the prompt (Tab takes it) and the next prompt spends it. A new terminal suggests nothing but lists the repo's open sentences (newest first, 14 days) | `/handover-copy` copies it and hides the band; `/handover` lists, `/handover N` puts one in the prompt | –
+| [mem-guard](mem-guard/) | Bash commands that run Node tools go into a memory-capped `claude-cmd.slice` scope. Refused, with the fix in the message: `nx affected`/`run-many` without `--parallel=1`, a pnpm script that has a `:lite` twin, jest without a worker cap (`--maxWorkers=N`, `-w N` or `--runInBand`; a percentage doesn't count), `pkill -f`/`pgrep -f` with an unbracketed pattern, `ci:local`, heavy runs and dev-server starts while the slice is above 75 % or under pressure, a third heavy command or a third dev server at once, and writes by a `check-runner` subagent. See [mem-guard](#mem-guard-memory-rules-for-bash) | – | Linux with systemd: a user `claude-cmd.slice`, `ps`; see [mem-guard](#mem-guard-memory-rules-for-bash) |
+| [handover](handover/) | Skill plus mod: the `handover` skill writes a one-sentence handover for a cold session to `~/.claude/handover.md`; the mod files it per session under `~/.claude/handovers/<session id>.md`, so parallel sessions in one repo never overwrite each other. A band above the prompt shows it; after `/clear` that session's sentence waits in the prompt (Tab takes it) and the next prompt spends it. A new terminal suggests nothing but lists the repo's open sentences (newest first, 14 days) | `/handover-copy` copies it and hides the band; `/handover` lists, `/handover N` puts one in the prompt | – |
 | [herdr-notify](herdr-notify/) | GNOME popup when Claude waits for a permission, an answer or a new prompt (a `Notification` hook, not a plugin). Skipped while that pane is the focused one in herdr. Clicking it raises Ghostty and focuses that session's herdr pane. Hook: `"Notification": [{"matcher": "permission_prompt\|idle_prompt\|elicitation_dialog", "hooks": [{"type": "command", "command": "bash \"$HOME/.claude/skills/herdr-notify/notify.sh\""}]}]` | – | herdr, Ghostty, `notify-send`, `jq` |
-| [stack-down](stack-down/) | On `/clear` and exit, stops what the session's repo left running: its `nx` processes (with their workers) and its Docker Compose projects (`compose down`, volumes kept). Only for a session at a repo's top level (`git rev-parse --show-toplevel`); one started above the repos, such as `~/Dev`, stops nothing | – | `docker compose`, `git` |
-| [review-walk](review-walk/) | Skill plus mod: `/review-walk` takes the findings of the reviews already run in the conversation (`/code-review`, a repo's own review skill, CodeRabbit threads, MR comments), merges and ranks them, and asks fix / issue / skip one finding at a time; fixes wait until every finding is decided. The mod puts `Finding N/M`, a progress bar and the decisions so far over each question, and a band above the prompt between them | `/review-walk` | **A review run first**: it walks findings, it never reviews. Any review skill or source works |
+| [stack-down](stack-down/) | On `/clear` and exit (also logout, a finished `-p` run, SIGINT/SIGTERM/SIGHUP), stops what the session left running in its repo: the `nx` processes it started (with their workers), and the repo's Docker Compose projects (`compose down`, volumes kept) unless another Claude session works in the same repo. Only for a session at a repo's top level (`git rev-parse --show-toplevel`); one started above the repos, such as `~/Dev`, stops nothing | – | `docker compose`, `git` |
+| [review-walk](review-walk/) | Skill plus mod: `/review-walk` takes the findings of the reviews already run in the conversation (`/code-review`, a repo's own review skill, CodeRabbit threads, MR comments), merges and ranks them, and asks fix / issue / skip one finding at a time; fixes wait until every finding is decided. The mod puts `Finding N/M`, a progress bar and the decisions so far over each question, and a band above the prompt between them. Decisions you authorised up front ("apply every Fix") are recorded through its `ReviewWalkDecide` tool instead of a question. The walk starts only after the skill runs, so a review on its own draws no band | `/review-walk` | **A review run first**: it walks findings, it never reviews. Any review skill or source works |
 
 The model sees exactly what it would without them: the mods change what is drawn, except
 reminder-log, which drops two kinds of injected reminders, redact, which hides secrets, mem-guard,
 which runs Node commands inside a systemd scope and refuses some with a `mem-guard: …` error, and
-stack-down, which stops a repo's servers and Compose stacks when its session ends.
+stack-down, which stops the session's own servers and, when no other session is in the repo, its Compose stacks when the session ends.
 
 Three mods call out on their own:
 
@@ -129,7 +129,10 @@ secrets too short for the generic rules. A client secret containing `dev`, `loca
 - images; output with no file behind it, cut short (`git show HEAD:.env | cut …`,
   `printenv | cut …`); the transcript file's structured tool records, which keep real values
   (the model does not read them).
-- the cut-short pre-scan misses globs (`cut -c1-40 *.env`) and quoted paths with spaces.
+- the cut-short pre-scan misses globs (`cut -c1-40 *.env`), quoted paths with spaces and a `cd`
+  inside a subshell (`(cd sub && cut -c1-40 .env)`).
+- betterleaks' `client-secret` rule needs some entropy (≥ 3.0), so short, repetitive client
+  secrets stay visible.
 - values shorter than 8 characters are never hidden.
 - a value restored into a file by Write/Edit can be read back transformed (`base64`, `rev`,
   `xxd`) or sent (`curl -T file`). redact keeps secrets out of the model's context by accident;
@@ -139,8 +142,8 @@ secrets too short for the generic rules. A client secret containing `dev`, `loca
 
 The vault lives in session memory: `/exit` forgets it.
 
-The status line shows `redacted N`: N counts vault entries, so a PEM key counts once per line.
-A toast names the rule for each new value it hides. Without betterleaks the status line says
+The status line shows `redacted N` once a value is hidden: N counts vault entries, so a PEM key
+counts once per line. A toast per call names the rules that hid new values. Without betterleaks the status line says
 `off (no betterleaks)` and nothing is hidden. A betterleaks run that fails leaves that call
 unredacted (values already in the vault stay hidden): one toast per failure streak, the status
 says `off (betterleaks)`, and the next call scans again.
@@ -148,7 +151,7 @@ says `off (betterleaks)`, and the next call scans again.
 
 ## mem-guard: memory rules for Bash
 
-Every Bash command that names a Node tool (`node`, `npx`, `pnpm`, `npm`, `yarn`, `nx`, `jest`,
+Every Bash command that names a Node tool (`node`, `npx`, `pnpm`, `npm`, `npm exec`, `yarn`, `nx`, `jest`,
 `vitest`, `playwright`, `tsc`, `ngc`) runs as
 `systemd-run --user --scope --slice=claude-cmd.slice -p MemoryMax=30% -p MemorySwapMax=4% -- bash -c '…'`,
 so an overrun dies with exit 137 instead of taking the desktop down. Leading `cd … &&` stay
@@ -164,6 +167,9 @@ The rules read what each part of a command runs (after `&&`, `|`, `;`, `&`, `$( 
   dev servers don't count;
 - at most 2 dev servers (`nx serve`, `nx run x:serve`, a `serve*` script): the API and one app.
 
+A command counts as heavy for these checks when it runs one of those tools, `docker compose up`, or a
+`test`, `build`, `lint`, `typecheck`, `e2e` or `serve*` script.
+
 **check-runner subagents** (an agent type of the owner's) only run checks: git commands that change
 the tree or history, `sed -i`, `--write`/`--fix`, starting or stopping servers or processes, and
 writes outside `/tmp` are refused with "Report the failure instead of fixing it".
@@ -178,6 +184,9 @@ writes outside `/tmp` are refused with "Report the failure instead of fixing it"
   MemoryMax=30%
   MemorySwapMax=4%
   ```
+  A full slice can livelock without ever reaching the OOM killer, so let systemd-oomd kill a
+  scope in it under sustained pressure:
+  `systemctl --user set-property claude-cmd.slice ManagedOOMMemoryPressure=kill ManagedOOMMemoryPressureLimit=50%`.
   systemd turns a percentage into bytes of the machine's RAM (on 27 GiB: 8.2G and 1.1G), so the
   same unit fits any machine. Check what a machine gets:
   `systemd-run --user --scope -q -p MemoryMax=30% -- sh -c 'cat /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.max'`
@@ -228,7 +237,7 @@ herdr opens a ctrl+clicked link in the background with no feedback, and ignores 
 altogether. [herdr-link-toast](herdr-link-toast/) opens `http(s)` links with `xdg-open` and shows a
 toast. It also opens the path in quiet-bash's thumbnail captions, which link to
 `http://localhost/open-file/<path>` because `file://` isn't clickable in herdr. Such a link opens
-only when the path ends in `.png`; any other gets a "Could not open link" toast. Needs `python3`.
+only when the path ends in `.png`; any other gets a "Could not open link" toast. Needs `python3` ≥ 3.9.
 Install:
 
 ```sh
@@ -253,7 +262,7 @@ say so to the person instead of promising it works.
 
 | Works anywhere | Needs Linux | Never on macOS or Windows |
 |---|---|---|
-| quiet-spinner, reminder-log, mr-banner, coderabbit-band, redact (with `betterleaks`), handover, review-walk; usage-percent's `ctx/5h/wk` and pipeline parts | usage-percent's memory and dev-server parts (cgroup v2, `/proc`, `pwdx`; they stay empty elsewhere) | **mem-guard**: it wraps every Node command in `systemd-run`, so without systemd every `node`/`pnpm`/`nx` call fails. Leave it out. herdr-notify, herdr-link-toast: Linux, herdr, Ghostty, GNOME |
+| quiet-spinner, reminder-log, mr-banner, coderabbit-band, redact (with `betterleaks`), handover, review-walk; usage-percent's `ctx/5h/wk` and pipeline parts | usage-percent's memory and dev-server parts (cgroup v2, `/proc`, `pwdx`; they stay empty elsewhere); **stack-down** (`ps`, `/proc/<pid>/cwd`, `setsid`) | **mem-guard**: it wraps every Node command in `systemd-run`, so without systemd every `node`/`pnpm`/`nx` call fails. Leave it out. herdr-notify, herdr-link-toast: Linux, herdr, Ghostty, GNOME |
 
 - **Windows:** quiet-bash, redact and handover read POSIX paths (`/`, `~`). There, quiet-bash
   thumbnails and redact's Bash pre-scan find nothing, and handover leaves spent files behind.
@@ -286,13 +295,14 @@ dev-server rules only work with the real project names: read them from the repo
 |---|---|---|
 | mem-guard | `claude-cmd.slice` and its 30 % / 4 % limits; port 4700; `:lite` scripts; `ci:local` "~45 min"; the `check-runner` agent type; 2 heavy commands, 2 dev servers | `hooks/rules.ts`, `hooks/register.ts` |
 | usage-percent | `claude.slice` (usage) and `app.slice` (pressure) under the user manager; Nx repos only (`nx.json`) | `hooks/register.tsx` |
+| stack-down | another session is a process whose command is `claude` (native install); an npm install runs as `node …/cli.js`, goes unseen, and its repo's Compose stacks go down anyway | `hooks/targets.ts` |
 | mr-banner, coderabbit-band, quiet-bash | the GitLab MCP server named `gitlab` (`mcp__gitlab__…`) | `hooks/*.ts(x)` |
 | coderabbit-band, usage-percent | any remote that isn't GitHub (or Azure) is taken for GitLab | `hooks/register.tsx` |
 | herdr-notify | Ghostty's desktop entry `com.mitchellh.ghostty` | `notify.sh` |
 
 **5. Install and check.** Install as above (from a clone when you adapted a mod: an update replaces a marketplace copy), then run `claude plugin validate <mod>` and
 `claude plugin test <mod>` for each mod you install. Start a new session and check what the person
-should now see: the usage row, a tool row with `✓`, and for redact, `redacted 0` in the status line.
+should now see: the usage row, a tool row with `✓`, and for redact, nothing until it hides a value, then `redacted N` in the status line.
 
 ## Developing
 

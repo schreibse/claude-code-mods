@@ -9,6 +9,10 @@ export function handoverPath(home: string): string {
   return `${home}/.claude/handover.md`
 }
 
+export function expandHome(path: string, home: string): string {
+  return path === '~' || path.startsWith('~/') ? `${home}${path.slice(1)}` : path
+}
+
 export function sessionPath(home: string, sessionId: string): string {
   return `${home}/.claude/handovers/${sessionId}.md`
 }

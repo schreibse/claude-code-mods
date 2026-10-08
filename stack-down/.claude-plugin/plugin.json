@@ -1,6 +1,6 @@
 {
   "name": "stack-down",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "On /clear and exit, stops the session repo's nx processes and brings its Compose projects down.",
   "author": {
     "name": "Stephan Schreiber"

@@ -8,6 +8,7 @@ const FINDINGS = [
 
 function engine($t: Parameters<TestBody>[0], on: Parameters<TestBody>[1], answer: string) {
   const duringQuestion: string[] = []
+  on('session.id', () => ({ value: 's1' }) as never)
   on('tool.call', async (_, e) => {
     const call = e as { tool: string; questions?: { question: string }[] }
     if (call.tool !== 'AskUserQuestion') {
@@ -28,6 +29,9 @@ function engine($t: Parameters<TestBody>[0], on: Parameters<TestBody>[1], answer
 const band = async ($: Parameters<TestBody>[0]) =>
   $.ui.mount({ plugin: 'review-walk', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false } as never })
 
+const SKILL = { tool: 'Skill', skill: 'review-walk' } as const
+const DECIDE = 'mcp__review-walk__ReviewWalkDecide'
+
 const ask = (header: string) => ({
   tool: 'AskUserQuestion',
   questions: [{ question: 'Null check missing: fix it?', header, multiSelect: false, options: [{ label: 'Fix', description: '' }, { label: 'Skip', description: '' }] }],
@@ -36,6 +40,7 @@ const ask = (header: string) => ({
 test('a report starts the walk; each N/M answer moves the bar and the tally', async ($, on) => {
   const { duringQuestion } = engine($, on, 'Fix')
   expect(await (await band($)).find({ type: 'Text', text: ' 0/2 decided · fix 0 · issue 0 · skip 0' })).toBe(undefined)
+  await $.tool.call(SKILL)
   await $.tool.call({ tool: 'ReportFindings', findings: FINDINGS })
   expect(await (await band($)).find({ type: 'Text', text: ' 0/2 decided · fix 0 · issue 0 · skip 0' })).toBeDefined()
   await $.tool.call(ask('1/2'))
@@ -45,6 +50,7 @@ test('a report starts the walk; each N/M answer moves the bar and the tally', as
 
 test('the closing report with outcomes ends the walk', async ($, on) => {
   engine($, on, 'Fix')
+  await $.tool.call(SKILL)
   await $.tool.call({ tool: 'ReportFindings', findings: FINDINGS })
   await $.tool.call({ tool: 'ReportFindings', findings: FINDINGS.map(f => ({ ...f, outcome: 'fixed' })) })
   expect(await (await band($)).find({ type: 'Text', text: 'Review walk ' })).toBe(undefined)
@@ -52,8 +58,30 @@ test('the closing report with outcomes ends the walk', async ($, on) => {
 
 test('a question outside the walk leaves it alone', async ($, on) => {
   const { duringQuestion } = engine($, on, 'Fix')
+  await $.tool.call(SKILL)
   await $.tool.call({ tool: 'ReportFindings', findings: FINDINGS })
   await $.tool.call(ask('Route'))
   expect(duringQuestion).toEqual(['in the band'])
   expect(await (await band($)).find({ type: 'Text', text: ' 0/2 decided · fix 0 · issue 0 · skip 0' })).toBeDefined()
+})
+
+test('a report starts a walk only after the review-walk skill ran, and the closing report disarms it', async ($, on) => {
+  engine($, on, 'Fix')
+  await $.tool.call({ tool: 'ReportFindings', findings: FINDINGS })
+  expect(await (await band($)).find({ type: 'Text', text: 'Review walk ' })).toBe(undefined)
+  await $.tool.call(SKILL)
+  await $.tool.call({ tool: 'ReportFindings', findings: FINDINGS })
+  await $.tool.call({ tool: 'ReportFindings', findings: FINDINGS.map(f => ({ ...f, outcome: 'fixed' })) })
+  await $.tool.call({ tool: 'ReportFindings', findings: FINDINGS })
+  expect(await (await band($)).find({ type: 'Text', text: 'Review walk ' })).toBe(undefined)
+})
+
+test('decisions recorded without a question move the tally', async ($, on) => {
+  engine($, on, 'Fix')
+  expect(await $.tool.call({ tool: DECIDE, findings: [1], decision: 'fix' } as never)).toEqual({ deny: 'No review walk is active.' })
+  await $.tool.call(SKILL)
+  await $.tool.call({ tool: 'ReportFindings', findings: FINDINGS })
+  expect(await $.tool.call({ tool: DECIDE, findings: [1, 2], decision: 'fix' } as never)).toEqual({ result: 'Recorded fix for finding 1, 2; 2/2 decided.' })
+  expect(await (await band($)).find({ type: 'Text', text: ' 2/2 decided · fix 2 · issue 0 · skip 0' })).toBeDefined()
+  expect(await $.tool.call({ tool: DECIDE, findings: [3], decision: 'skip' } as never)).toEqual({ deny: 'Findings are numbered 1 to 2; got 3.' })
 })

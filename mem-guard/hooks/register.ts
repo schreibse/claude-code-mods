@@ -1,16 +1,27 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, heavyScopes, invocations, isHeavy, isServe, parsePressure, refusal, scoped, serveRefusal, serveScopes } from './rules'
+import { checkRunnerRefusal, crowdedRefusal, invocations, isHeavy, isServe, parsePressure, refusal, runningRefusal, scoped } from './rules'
 import type { Invocation, Pressure, ScriptsByDir } from './rules'
 
 let cmdSlice = ''
 let home = ''
 
-async function readPressure($: EngineInterface): Promise<Pressure | null> {
+// Stays empty while claude-cmd.slice is inactive, so it is looked up again on the next call.
+async function resolveCmdSlice($: EngineInterface): Promise<string> {
   if (cmdSlice === '') {
+    const group = await $.process.run(['systemctl', '--user', 'show', 'claude-cmd.slice', '-p', 'ControlGroup', '--value']).catch(() => null)
+    const path = group?.exitCode === 0 ? group.stdout.trim() : ''
+    cmdSlice = path === '' ? '' : `/sys/fs/cgroup${path}`
+  }
+  return cmdSlice
+}
+
+async function readPressure($: EngineInterface): Promise<Pressure | null> {
+  const slice = await resolveCmdSlice($)
+  if (slice === '') {
     return null
   }
-  const read = (file: string) => $.fs.read(`${cmdSlice}/${file}`)
+  const read = (file: string) => $.fs.read(`${slice}/${file}`)
   const [current, max, pressure] = await Promise.all([read('memory.current'), read('memory.max'), read('memory.pressure')]).catch(() => ['', '', ''])
   return parsePressure(current ?? '', max ?? '', pressure ?? '')
 }
@@ -32,9 +43,7 @@ async function scriptsOf($: EngineInterface, calls: readonly Invocation[]): Prom
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    const group = await $.process.run(['systemctl', '--user', 'show', 'claude-cmd.slice', '-p', 'ControlGroup', '--value']).catch(() => null)
-    const path = group?.exitCode === 0 ? group.stdout.trim() : ''
-    cmdSlice = path === '' ? '' : `/sys/fs/cgroup${path}`
+    await resolveCmdSlice($)
     home = (await $.env.get('HOME')) ?? ''
     return next(e)
   })
@@ -43,9 +52,9 @@ export const register: Register = on => {
     if (e.agentId !== undefined) {
       const agents = await $.agent.list().catch(() => [])
       if (agents.find(agent => agent.id === e.agentId)?.type === 'check-runner') {
-        const writes = checkRunnerRefusal(e.command)
-        if (writes !== null) {
-          return { deny: `mem-guard: ${writes}` }
+        const writeRefusal = checkRunnerRefusal(e.command)
+        if (writeRefusal !== null) {
+          return { deny: `mem-guard: ${writeRefusal}` }
         }
       }
     }
@@ -54,20 +63,16 @@ export const register: Register = on => {
     if (refused !== null) {
       return { deny: `mem-guard: ${refused}` }
     }
-    if (isHeavy(calls)) {
+    if (isHeavy(calls) || isServe(calls)) {
       const pressure = await readPressure($)
       const crowded = pressure === null ? null : crowdedRefusal(pressure)
       if (crowded !== null) {
         return { deny: `mem-guard: ${crowded}` }
       }
       const ps = await $.process.run(['ps', '-eo', 'cgroup:250=,args=', '--cols', '600']).catch(() => null)
-      const servers = ps?.exitCode === 0 && isServe(calls) ? serveRefusal(serveScopes(ps.stdout)) : null
-      if (servers !== null) {
-        return { deny: `mem-guard: ${servers}` }
-      }
-      const busy = ps?.exitCode === 0 ? concurrencyRefusal(heavyScopes(ps.stdout)) : null
-      if (busy !== null) {
-        return { deny: `mem-guard: ${busy}` }
+      const busyRefusal = ps?.exitCode === 0 ? runningRefusal(calls, ps.stdout) : null
+      if (busyRefusal !== null) {
+        return { deny: `mem-guard: ${busyRefusal}` }
       }
     }
     return next({ ...e, command: scoped(e.command) })

@@ -1,6 +1,6 @@
 {
   "name": "handover",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The handover sentence for a cold session, one per session: a band above the prompt, /handover-copy to copy it, after /clear it waits in the prompt, and /handover picks one in a new terminal",
   "author": {
     "name": "Stephan Schreiber"

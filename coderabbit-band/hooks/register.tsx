@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import { ICONS, SEVERITIES, discussionsIn, fingerprint, isWorthShowing, openCount, tallyOf } from './tally'
 import type { Tally } from '../types'
@@ -18,6 +18,10 @@ type Poll = { root: string; branch: string; dueAt: number; fastUntil: number; is
 
 const CODERABBIT_ORANGE = '#FF570A'
 const HOSTS_WITHOUT_CODERABBIT = /github\.com|dev\.azure\.com|visualstudio\.com/
+
+export function isGitPush(command: string): boolean {
+  return /\bgit(?:\s+-[Cc]\s+\S+)*\s+push\b/.test(command)
+}
 
 async function fetchTally($: EngineInterface, root: string, branch: string): Promise<Tally | null> {
   const mr = await $.process.run(['glab', 'mr', 'view', branch, '-F', 'json'], { cwd: root, timeoutMs: 20_000 })
@@ -55,19 +59,27 @@ async function tick($: EngineInterface, poll: Poll) {
   }
 }
 
+function startTick($: EngineInterface, poll: Poll): void {
+  void tick($, poll).catch((error: unknown) => $.ui.log(`coderabbit-band: ${String(error)}`, { to: 'debug' }))
+}
+
 export const register: Register = on => {
   let poll: Poll | null = null
+  let timer: Timer | null = null
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     await $.command.register({ name: 'coderabbit', description: 'Hide or show the CodeRabbit band' })
+    timer?.cancel()
+    timer = null
+    poll = null
     const root = await $.session.root()
     const remote = await $.process.run(['git', 'remote', 'get-url', 'origin'], { cwd: root })
     if (remote.exitCode === 0 && !HOSTS_WITHOUT_CODERABBIT.test(remote.stdout)) {
       const current: Poll = { root, branch: '', dueAt: 0, fastUntil: 0, isBusy: false }
       poll = current
-      void tick($, current)
-      $.clock.every(TICK_MS, () => void tick($, current))
+      startTick($, current)
+      timer = $.clock.every(TICK_MS, () => startTick($, current))
     }
     return result
   })
@@ -85,7 +97,7 @@ export const register: Register = on => {
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const result = await next(e)
     const current = poll
-    if (current !== null && /\bgit push\b/.test(e.command)) {
+    if (current !== null && isGitPush(e.command)) {
       const now = await $.clock.now()
       current.fastUntil = now + AFTER_PUSH_MS
       current.dueAt = now + TICK_MS
@@ -99,7 +111,7 @@ export const register: Register = on => {
     // `@coderabbitai resolve` can go out through any GitLab MCP note tool or a glab command, so the whole call is searched.
     if (current !== null && (e.tool === 'mcp__gitlab__resolve_merge_request_thread' || /@coderabbitai resolve/.test(JSON.stringify(e)))) {
       current.dueAt = 0
-      $.clock.after(AFTER_RESOLVE_MS, () => void tick($, current))
+      $.clock.after(AFTER_RESOLVE_MS, () => startTick($, current))
     }
     return result
   })

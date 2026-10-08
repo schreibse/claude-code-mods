@@ -24,6 +24,28 @@ test('serve processes come with their pid', () => {
   expect(serveProcesses(ps)).toEqual([{ pid: '56748', project: 'api' }, { pid: '56855', project: 'admin' }])
 })
 
+test('servers of the default project, by --project and from run-many show too', () => {
+  const ps = [
+    '  100 node ./node_modules/.bin/nx serve',
+    '  101 node ./node_modules/.bin/nx serve --port=4300',
+    '  102 node ./node_modules/.bin/nx serve --project=admin',
+    '  103 node ./node_modules/.bin/nx serve -p shop --host 0.0.0.0',
+    '  104 node ./node_modules/.bin/nx run-many -t serve -p api,admin',
+    '  105 node ./node_modules/.bin/nx run-many --targets=build,serve',
+    '  106 node ./node_modules/.bin/nx run-many -t build -p api',
+    '  107 node ./node_modules/.bin/nx serve-static web',
+  ].join('\n')
+  expect(serveProcesses(ps).map(p => `${p.pid} ${p.project}`)).toEqual([
+    '100 serve',
+    '101 serve',
+    '102 admin',
+    '103 shop',
+    '104 api',
+    '104 admin',
+    '105 serve',
+  ])
+})
+
 test('only servers running in the session tree count, once each', () => {
   const processes = [
     { pid: '1', project: 'api' },

@@ -1,6 +1,6 @@
 import type { MrCard, MrKind } from '../types'
 
-// Threads and thread replies get no card: a review posts one per finding, and replies come by the dozen.
+// Plain notes, `gh pr comment` and `glab mr note` get a card; threads, replies and unpublished drafts do not, as a review posts one per finding.
 const GITLAB_KINDS: Record<string, MrKind> = {
   mcp__gitlab__create_merge_request: 'created',
   mcp__gitlab__merge_merge_request: 'merged',
@@ -11,16 +11,16 @@ const GITLAB_KINDS: Record<string, MrKind> = {
 }
 
 // Only a command in its own right counts (start of a line or after `&&`, `||`, `;`, `|`), not one quoted inside another.
-const CLI = /(?:^|&&|[;|])\s*(?:\w+=\S*\s+)*(?:glab\s+mr|gh\s+pr)\s+(create|merge|approve|review|note|comment)\b([^;&|\n]*)/m
+const CLI = /(?:^|&&|[;|])\s*(?:\w+=\S*\s+)*(glab\s+mr|gh\s+pr)\s+(create|merge|approve|review|note|comment)\b([^;&|\n]*)/m
 const MR_URL = /https?:\/\/[^\s"'<>\\)]+?\/(?:-\/merge_requests|pull)\/\d+/
-// `gh pr merge` and `gh pr review` name the PR only as `owner/repo#12`.
+// `gh pr merge` and `gh pr review` name the PR only as `owner/repo#12`; elsewhere that is no GitHub PR.
 const GH_REF = /\b([\w.-]+\/[\w.-]+)#(\d+)\b/
 
 export function kindOf(tool: string, command = ''): MrKind | null {
   if (tool !== 'Bash') {
     return GITLAB_KINDS[tool] ?? null
   }
-  const [, verb, args = ''] = CLI.exec(command) ?? []
+  const [, , verb, args = ''] = CLI.exec(command) ?? []
   if (verb === undefined || /(?:^|\s)(?:--help|-h)\b/.test(args)) {
     return null
   }
@@ -30,8 +30,12 @@ export function kindOf(tool: string, command = ''): MrKind | null {
   return verb === 'create' ? 'created' : verb === 'merge' ? 'merged' : verb === 'approve' ? 'approved' : 'reviewed'
 }
 
-export function urlIn(text: string): string | undefined {
-  const github = GH_REF.exec(text)
+export function isGh(command: string): boolean {
+  return CLI.exec(command)?.[1]?.startsWith('gh') ?? false
+}
+
+export function urlIn(text: string, isGitHub = false): string | undefined {
+  const github = isGitHub ? GH_REF.exec(text) : null
   return MR_URL.exec(text)?.[0] ?? (github ? `https://github.com/${github[1]}/pull/${github[2]}` : undefined)
 }
 
@@ -52,9 +56,9 @@ export function mergeRequestIn(text: string): { url: string; title?: string } | 
   }
 }
 
-export function cardFrom(kind: MrKind, text: string, iid?: unknown): MrCard {
+export function cardFrom(kind: MrKind, text: string, iid?: unknown, isGitHub = false): MrCard {
   const mr = mergeRequestIn(text)
-  const url = mr?.url ?? urlIn(text)
+  const url = mr?.url ?? urlIn(text, isGitHub)
   return { kind, ref: refOf(url, iid), url, title: mr?.title }
 }
 

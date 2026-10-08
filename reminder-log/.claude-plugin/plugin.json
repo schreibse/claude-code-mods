@@ -1,6 +1,6 @@
 {
   "name": "reminder-log",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tallies the reminders Claude Code injects for the model, per session; drops the token counter and repeated attribution blocks; /reminders prints the last 30 days",
   "author": {
     "name": "Stephan Schreiber"

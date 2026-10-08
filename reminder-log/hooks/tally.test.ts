@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { merge, record, report, shouldDrop, staleKeys } from './tally'
+import { current, merge, record, report, shouldDrop, staleKeys } from './tally'
 
 test('counts and sizes each type, keeping the latest sample', () => {
   const one = record(undefined, 'todo_reminder', 'engine', 'first', 't1')
@@ -42,11 +42,20 @@ test('drops the token counter always and the attribution block only when unchang
   expect(shouldDrop('todo_reminder', 'x', 'x')).toBe(false)
 })
 
-test('a session tally is stale 30 days after its latest reminder, with its attribution twin', () => {
+test('a tally begun over 30 days ago is stale; its attribution twin only once the session is idle that long', () => {
   const now = Date.parse('2026-11-10T12:00:00Z')
   const tallies = {
     'tally:old': record(record(undefined, 'a', 'engine', 'x', '2026-10-01T00:00:00Z'), 'b', 'engine', 'y', '2026-10-10T11:00:00Z'),
-    'tally:recent': record(record(undefined, 'a', 'engine', 'x', '2026-09-01T00:00:00Z'), 'b', 'engine', 'y', '2026-10-11T13:00:00Z'),
+    'tally:long': record(record(undefined, 'a', 'engine', 'x', '2026-09-01T00:00:00Z'), 'b', 'engine', 'y', '2026-10-11T13:00:00Z'),
+    'tally:recent': record(undefined, 'a', 'engine', 'x', '2026-10-11T13:00:00Z'),
   }
-  expect(staleKeys(tallies, now)).toEqual(['tally:old', 'kept-attribution:old'])
+  expect(staleKeys(tallies, now)).toEqual(['tally:old', 'kept-attribution:old', 'tally:long'])
+})
+
+test('a tally counts at most the last 30 days, then starts afresh', () => {
+  const now = Date.parse('2026-11-10T12:00:00Z')
+  const recent = record(undefined, 'a', 'engine', 'x', '2026-10-11T13:00:00Z')
+  expect(current(recent, now)).toBe(recent)
+  expect(current(record(undefined, 'a', 'engine', 'x', '2026-10-10T11:00:00Z'), now)).toBeUndefined()
+  expect(current(undefined, now)).toBeUndefined()
 })

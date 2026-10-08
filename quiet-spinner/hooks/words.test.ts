@@ -6,3 +6,7 @@ test('each mode gets a plain word', () => {
   expect(word('tool-use')).toBe('running')
   expect(word('responding')).toBe('writing')
 })
+
+test('an unknown mode keeps its own name', () => {
+  expect(word('compacting')).toBe('compacting')
+})

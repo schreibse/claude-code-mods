@@ -68,9 +68,19 @@ function lastSeen(tally: Tally): string {
   return Object.values(tally.types).reduce((latest, e) => (e.lastSeen > latest ? e.lastSeen : latest), tally.since)
 }
 
+function cutoff(now: number): string {
+  return new Date(now - RETENTION_MS).toISOString()
+}
+
+/** A tally counts at most the last 30 days: one begun earlier is dropped and starts afresh. */
+export function current(tally: Tally | undefined, now: number): Tally | undefined {
+  return tally !== undefined && tally.since >= cutoff(now) ? tally : undefined
+}
+
+/** Tallies begun over 30 days ago, and the attribution twin of a session idle that long. */
 export function staleKeys(tallies: Readonly<Record<string, Tally>>, now: number): string[] {
-  const cutoff = new Date(now - RETENTION_MS).toISOString()
-  return Object.entries(tallies)
-    .filter(([, tally]) => lastSeen(tally) < cutoff)
-    .flatMap(([key]) => [key, KEPT_PREFIX + key.slice(TALLY_PREFIX.length)])
+  return Object.entries(tallies).flatMap(([key, tally]) => [
+    ...(current(tally, now) === undefined ? [key] : []),
+    ...(lastSeen(tally) < cutoff(now) ? [KEPT_PREFIX + key.slice(TALLY_PREFIX.length)] : []),
+  ])
 }

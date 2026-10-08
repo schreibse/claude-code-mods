@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Hook, Register } from 'claude-code'
 
-import { cardFrom, kindOf, label, mergeRequestIn } from './cards'
+import { cardFrom, isGh, kindOf, label, mergeRequestIn } from './cards'
 import type { MrCard, MrKind } from '../types'
 
 type Render = Parameters<Hook<'ui.render'>>[1]
@@ -44,13 +44,14 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     // The GitLab MCP tools name their MR as project_id and merge_request_iid, untyped while no MCP tool is declared.
     const input: Record<string, unknown> = e
-    const kind = kindOf(e.tool, e.tool === 'Bash' ? e.command : undefined)
+    const command = e.tool === 'Bash' ? e.command : ''
+    const kind = kindOf(e.tool, command)
     const result = await next(e)
     if (kind === null || result.deny !== undefined || result.isError) {
       return result
     }
     try {
-      const card = await withMergeRequest($, cardFrom(kind, result.text ?? '', input.merge_request_iid), input)
+      const card = await withMergeRequest($, cardFrom(kind, result.text ?? '', input.merge_request_iid, isGh(command)), input)
       await update($, cards, all => ({ ...all, [e.tool_use_id]: card }))
     } catch (error) {
       $.ui.toast(`mr-banner: no card for ${e.tool} (${String(error)})`)

@@ -3,6 +3,12 @@ import type { Decision, Finding, Walk } from '../types'
 type Reported = { file: string; line?: number; summary: string; short_summary?: string; category?: string; outcome?: string }
 
 const BAR_WIDTH = 20
+const SKILL = 'review-walk'
+
+/** The skill as a user skill (`review-walk`) or as the plugin's (`review-walk:review-walk`). */
+export function isWalkSkill(name: string | undefined): boolean {
+  return name === SKILL || name === `${SKILL}:${SKILL}`
+}
 
 /** A report without outcomes starts a walk; one with outcomes is the closing report and ends it. */
 export function walkFrom(reported: Reported[]): Walk | null {
@@ -25,6 +31,20 @@ export function positionOf(header: string | undefined, walk: Walk | null): numbe
   }
   const n = Number(match[1])
   return n >= 1 && n <= walk.findings.length ? n - 1 : null
+}
+
+/** Records decisions the user authorised without a question; the text says why when they cannot apply. */
+export function decide(walk: Walk | null, findings: readonly number[], decision: Decision): Walk | string {
+  if (walk === null) {
+    return 'No review walk is active.'
+  }
+  const total = walk.findings.length
+  const outside = findings.filter(n => !Number.isInteger(n) || n < 1 || n > total)
+  if (findings.length === 0 || outside.length > 0) {
+    return `Findings are numbered 1 to ${total}; got ${findings.join(', ') || 'none'}.`
+  }
+  const chosen = new Set(findings.map(n => n - 1))
+  return { ...walk, decisions: walk.decisions.map((d, i) => (chosen.has(i) ? decision : d)) }
 }
 
 export function decisionOf(answer: string | undefined): Decision | null {

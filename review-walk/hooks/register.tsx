@@ -1,10 +1,15 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { bar, decided, decisionOf, describe, positionOf, tally, walkFrom } from './rules'
-import type { Walk } from '../types'
+import { bar, decide, decided, decisionOf, describe, isWalkSkill, positionOf, tally, walkFrom } from './rules'
+import type { Decision, Walk } from '../types'
 
 const walk = atom({ plugin: 'review-walk', key: 'walk' } as const, null)
+const DECIDE = 'ReviewWalkDecide'
+const DECISIONS = ['fix', 'issue', 'skip']
+
+// The session whose review-walk skill ran last: only its reports start or end a walk.
+let armedFor: string | null = null
 
 function progress($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0], current: Walk) {
   const { Box, Text } = $.ui.resolve(e)
@@ -27,12 +32,61 @@ function progress($: EngineInterface, e: Parameters<EngineInterface['ui']['resol
 }
 
 export const register: Register = on => {
-  on('tool.call', { tool: 'ReportFindings' }, async ($, e, next) => {
+  on('session.start', async ($, e, next) => {
+    await $.tool.register({
+      name: DECIDE,
+      description: 'Records review-walk decisions the user authorised without a question, so the walk band counts them. findings are the 1-based N of N/M.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          findings: { type: 'array', items: { type: 'integer', minimum: 1 }, minItems: 1 },
+          decision: { type: 'string', enum: DECISIONS },
+        },
+        required: ['findings', 'decision'],
+      },
+    })
+    return next(e)
+  })
+
+  on('tool.call', { tool: 'Skill' }, async ($, e, next) => {
     const result = await next(e)
-    if (!result.isError) {
-      await update($, walk, () => walkFrom(e.findings)).catch(() => undefined)
+    if (!result.isError && isWalkSkill(e.skill)) {
+      armedFor = await $.session.id()
     }
     return result
+  })
+
+  on('command.run', async ($, e, next) => {
+    if (isWalkSkill(e.command)) {
+      armedFor = await $.session.id()
+    }
+    return next(e)
+  })
+
+  on('tool.call', { tool: 'ReportFindings' }, async ($, e, next) => {
+    const result = await next(e)
+    if (result.isError || armedFor === null || armedFor !== (await $.session.id())) {
+      return result
+    }
+    const started = walkFrom(e.findings)
+    if (started === null) {
+      armedFor = null
+    }
+    await update($, walk, () => started).catch(() => undefined)
+    return result
+  })
+
+  on('tool.call', { tool: /^mcp__review-walk__ReviewWalkDecide$/ }, async ($, e) => {
+    const { findings, decision } = e as unknown as { findings?: unknown; decision?: unknown }
+    if (!Array.isArray(findings) || typeof decision !== 'string' || !DECISIONS.includes(decision)) {
+      return { deny: `${DECIDE} takes { findings: number[], decision: 'fix' | 'issue' | 'skip' }.` }
+    }
+    const updated = decide(await read($, walk), findings as number[], decision as Decision)
+    if (typeof updated === 'string') {
+      return { deny: updated }
+    }
+    await update($, walk, () => updated)
+    return { result: `Recorded ${decision} for finding ${findings.join(', ')}; ${decided(updated)}/${updated.findings.length} decided.` }
   })
 
   on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { KEPT_PREFIX, TALLY_PREFIX, merge, record, report, shouldDrop, staleKeys, type Tally } from './tally'
+import { KEPT_PREFIX, TALLY_PREFIX, current, merge, record, report, shouldDrop, staleKeys, type Tally } from './tally'
 
 async function readTallies($: EngineInterface): Promise<Record<string, Tally>> {
   const keys = (await $.store.keys()).filter(key => key.startsWith(TALLY_PREFIX))
@@ -16,8 +16,15 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // The attribution block leaves the context with a compaction, so the next one is sent again.
+  on('classic.SessionStart', { source: 'compact' }, async ($, e, next) => {
+    await $.store.delete(KEPT_PREFIX + (await $.session.id()))
+    return next(e)
+  })
+
   on('command.run', { command: 'reminders' }, async $ => {
-    const tallies = Object.values(await readTallies($))
+    const now = await $.clock.now()
+    const tallies = Object.values(await readTallies($)).filter(tally => current(tally, now) !== undefined)
     return { text: report(merge(tallies), tallies.length) }
   })
 
@@ -29,10 +36,10 @@ export const register: Register = on => {
     if (e.type === 'remote_session_change' && !isDropped) {
       await $.store.set(keptKey, e.text)
     }
-    const now = new Date(await $.clock.now()).toISOString()
+    const now = await $.clock.now()
     const tallyKey = TALLY_PREFIX + session
-    const tally = (await $.store.get(tallyKey)) as Tally | undefined
-    await $.store.set(tallyKey, record(tally, e.type, e.origin.kind, e.text, now, isDropped))
+    const tally = current((await $.store.get(tallyKey)) as Tally | undefined, now)
+    await $.store.set(tallyKey, record(tally, e.type, e.origin.kind, e.text, new Date(now).toISOString(), isDropped))
     return result
   })
 }

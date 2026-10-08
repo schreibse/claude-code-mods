@@ -1,11 +1,12 @@
-const WORDS = {
+const WORDS: Record<string, string> = {
   requesting: 'waiting',
   responding: 'writing',
   thinking: 'thinking',
   'tool-input': 'preparing',
   'tool-use': 'running',
-} as const
+}
 
-export function word(mode: keyof typeof WORDS): string {
-  return WORDS[mode]
+// A mode the engine adds later keeps its own name rather than a blank spinner.
+export function word(mode: string): string {
+  return WORDS[mode] ?? mode
 }

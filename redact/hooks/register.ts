@@ -94,9 +94,14 @@ async function sealSourceFiles($: EngineInterface, call: { tool: string }): Prom
     input.tool === 'Bash' && typeof input.command === 'string'
       ? pathWords(input.command, await $.session.cwd(), home)
       : [input.file_path, input.path].filter((path): path is string => typeof path === 'string')
-  for (const path of candidates.slice(0, MAX_SOURCE_FILES)) {
+  let sealedFiles = 0
+  for (const path of candidates) {
+    if (sealedFiles === MAX_SOURCE_FILES) {
+      break
+    }
     const stat = await $.fs.stat(path).catch(() => null)
     if (stat?.kind === 'file' && stat.size <= MAX_SOURCE_BYTES) {
+      sealedFiles++
       await sealText($, await $.fs.read(path).catch(() => ''))
     }
   }
@@ -138,7 +143,7 @@ export const register: Register = on => {
     // A whole-file Write written from memory can silently leave out a value the model never saw.
     if (call.tool === 'Write') {
       const { file_path: path, content } = call as typeof call & { file_path: string; content: string }
-      const before = (await $.fs.stat(path).catch(() => null))?.kind === 'file' ? await $.fs.read(path) : ''
+      const before = (await $.fs.stat(path).catch(() => null))?.kind === 'file' ? await $.fs.read(path).catch(() => '') : ''
       const findings = await findSecrets($, before)
       const secrets = [...Object.values(await read($, vault)).map(entry => entry.value), ...findings.map(finding => finding.secret)]
       const lost = dropped(before, content, secrets)

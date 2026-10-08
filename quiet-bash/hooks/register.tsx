@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Hook, Register } from 'claude-code'
 
-import { MAX_IMAGE_SIDE, THUMB_BOXES, commandDir, diffStat, elapsed, failure, fit, isOversized, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shortPath, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
+import { MAX_IMAGE_SIDE, THUMB_BOXES, commandDir, diffStat, elapsed, failure, fit, isOversized, isQuietRead, keepsResult, openFileUrl, pipelineWaitTimeoutId, pngPathsIn, resolvePath, shortPath, shotMeta, shots, summary, supersede, thumbArgs, thumbKey, thumbRunKey, thumbText } from './rows'
 import type { ShotInfo, ThumbSize } from './rows'
 import type { Thumb } from '../types'
 
@@ -10,6 +10,7 @@ const shrunk = new Map<string, string | null>()
 const startedAt = new Map<string, number>()
 const durations = new Map<string, number>()
 const readOnly = new Set<string>()
+const timedOutWaits = new Set<string>()
 
 type ToolUseRender = Extract<Parameters<Hook<'ui.render'>>[1], { component: 'ToolUse' }>
 type TerminalRender = Extract<Parameters<Hook<'ui.render'>>[1], { surface: 'terminal' }>
@@ -44,13 +45,13 @@ async function homeOf($: EngineInterface): Promise<string> {
 
 // Read and SendUserFile show the PNGs they name; any other call, MCP included, shows PNGs its text names that changed while it ran.
 async function thumbsOf($: EngineInterface, call: ToolCall, result: unknown, since: number): Promise<Thumb[]> {
-  const named = call.tool === 'Read' ? [call.file_path] : call.tool === 'SendUserFile' ? call.files : null
-  if (named !== null) {
-    const found = await Promise.all(named.map(file => thumbOf($, file, 'small')))
-    return found.filter((thumb): thumb is Thumb => thumb !== null)
-  }
   const home = await homeOf($)
   const cwd = await $.session.cwd()
+  const named = call.tool === 'Read' ? [call.file_path] : call.tool === 'SendUserFile' ? call.files : null
+  if (named !== null) {
+    const found = await Promise.all(named.map(file => thumbOf($, resolvePath(file, cwd, home), 'small')))
+    return found.filter((thumb): thumb is Thumb => thumb !== null)
+  }
   const dir = call.tool === 'Bash' ? commandDir(call.command, cwd, home) : cwd
   const found: Thumb[] = []
   for (const file of pngPathsIn(JSON.stringify([call, result]), dir, home)) {
@@ -178,16 +179,19 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'thumb' }, async ($, e) => {
-    const parsed = thumbArgs(e.args, await homeOf($))
+    const home = await homeOf($)
+    const parsed = thumbArgs(e.args, home)
     if ('pasted' in parsed) {
       return { text: 'A pasted path turns into an image attachment before /thumb sees it. Type the path instead of pasting it.' }
     }
-    const thumb = await thumbOf($, parsed.file, parsed.size)
+    const file = resolvePath(parsed.file, await $.session.cwd(), home)
+    const thumb = await thumbOf($, file, parsed.size)
     if (!thumb) {
-      return { text: `Not a readable PNG: ${parsed.file}` }
+      return { text: `Not a readable PNG: ${file}` }
     }
-    await update($, thumbs, all => ({ ...all, [`cmd:${e.args.trim()}`]: [thumb] }))
-    return { text: `thumb: ${parsed.file}` }
+    const run = Object.keys(await read($, thumbs)).filter(key => key.startsWith(thumbKey(''))).length + 1
+    await update($, thumbs, all => ({ ...all, [thumbKey(run)]: [thumb] }))
+    return { text: thumbText(run, file) }
   })
 
   on('tool.call', async ($, e, next) => {
@@ -258,13 +262,22 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'CommandOutput', props: { command: 'thumb' } }, async ($, e, next) => {
-    const list = (await read($, thumbs))[`cmd:${e.props.args.trim()}`]
+    const key = thumbRunKey(e.props.text)
+    const list = key === undefined ? undefined : (await read($, thumbs))[key]
     return list && e.surface === 'terminal' ? await drawThumbs($, e, list, await homeOf($)) : next(e)
   })
 
+  on('prompt.submit', async ($, e, next) => {
+    const id = e.origin.kind === 'task-notification' ? pipelineWaitTimeoutId(e.text) : undefined
+    if (id !== undefined) {
+      timedOutWaits.add(id)
+    }
+    return next(e)
+  })
+
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
-    const { origin, task, text, isExpanded } = e.props
-    if (origin.kind !== 'task-notification' || isExpanded || !isPipelineWaitTimeout(text, task?.status) || (await read($, isLoud))) {
+    const { origin, task, isExpanded } = e.props
+    if (origin.kind !== 'task-notification' || isExpanded || !timedOutWaits.has(task?.id ?? '') || (await read($, isLoud))) {
       return next(e)
     }
     const { Box } = $.ui.resolve(e)

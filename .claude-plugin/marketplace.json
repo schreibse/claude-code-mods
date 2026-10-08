@@ -1,6 +1,6 @@
 {
   "name": "schreibse-mods",
-  "description": "Claude Code mods: quieter transcript, usage row, MR cards, secret redaction, memory guard",
+  "description": "Claude Code mods: quieter transcript, usage row, MR cards, CodeRabbit band, secret redaction, memory guard, handover, stack teardown, review walk",
   "owner": {
     "name": "Stephan Schreiber"
   },

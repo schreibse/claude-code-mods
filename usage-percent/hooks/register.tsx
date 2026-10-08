@@ -1,19 +1,18 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit } from 'claude-code'
+import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit, Timer } from 'claude-code'
 
 import { containerOf, directoriesOf, isUnder, memory, pressureAvg10, servedIn, serveProcesses } from './machine'
 import type { ServeProcess } from './machine'
 import { dim, joined, toneOf } from './pieces'
 import { forgeOf, hostOf, githubPipeline, gitlabPipeline, pipeline } from './pipeline'
 import type { Pipeline } from './pipeline'
-import type { Piece, Tone } from '../types'
+import type { Piece } from '../types'
 
 const WINDOWS: Record<string, string> = { five_hour: '5h', seven_day: 'wk' }
 const TICK_MS = 10_000
 const PIPELINE_RUNNING_MS = 60_000
 const PIPELINE_IDLE_MS = 300_000
 const AFTER_PUSH_MS = 15_000
-const COLORS: Record<Exclude<Tone, 'dim'>, string> = { yellow: 'yellow', red: 'red', green: 'green' }
 
 const usageLine = atom({ plugin: 'usage-percent', key: 'line' } as const, null)
 const nxLine = atom({ plugin: 'usage-percent', key: 'nx' } as const, null)
@@ -22,6 +21,10 @@ type Poll = { root: string; uid: string; head: string; pipelineAt: number; pushe
 
 function figure(label: string, percent: number): Piece[] {
   return [dim(`${label} `), { text: `${Math.round(percent)}%`, tone: toneOf(percent) }]
+}
+
+export function isGitPush(command: string): boolean {
+  return /\bgit(?:\s+-[Cc]\s+\S+)*\s+push\b/.test(command)
 }
 
 export function line(context: SessionContextUsage, rateLimits: readonly SessionRateLimit[]): Piece[] {
@@ -120,21 +123,29 @@ async function tick($: EngineInterface, poll: Poll) {
   }
 }
 
+function startTick($: EngineInterface, poll: Poll): void {
+  void tick($, poll).catch((error: unknown) => $.ui.log(`usage-percent: ${String(error)}`, { to: 'debug' }))
+}
+
 export const register: Register = on => {
   let poll: Poll | null = null
+  let timer: Timer | null = null
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     const { context, rateLimits } = await $.session.usage()
     await update($, usageLine, () => line(context, rateLimits))
 
+    timer?.cancel()
+    timer = null
+    poll = null
     const root = await $.session.root()
     if (await $.fs.exists(`${root}/nx.json`)) {
       const uid = (await $.process.run(['id', '-u'])).stdout.trim()
       const current: Poll = { root, uid, head: '', pipelineAt: 0, pushedAt: 0, pipe: null, composeDirs: new Map(), isBusy: false }
       poll = current
-      void tick($, current)
-      $.clock.every(TICK_MS, () => void tick($, current))
+      startTick($, current)
+      timer = $.clock.every(TICK_MS, () => startTick($, current))
     }
     return result
   })
@@ -146,7 +157,7 @@ export const register: Register = on => {
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const result = await next(e)
-    if (poll !== null && /\bgit push\b/.test(e.command)) {
+    if (poll !== null && isGitPush(e.command)) {
       poll.pushedAt = await $.clock.now()
     }
     return result
@@ -163,7 +174,7 @@ export const register: Register = on => {
     const { Box, Text } = $.ui.resolve(e)
     const draw = (pieces: readonly Piece[]) => (
       <Text>
-        {pieces.map(piece => (piece.tone === 'dim' ? <Text dimColor>{piece.text}</Text> : <Text color={COLORS[piece.tone]}>{piece.text}</Text>))}
+        {pieces.map(piece => (piece.tone === 'dim' ? <Text dimColor>{piece.text}</Text> : <Text color={piece.tone}>{piece.text}</Text>))}
       </Text>
     )
 

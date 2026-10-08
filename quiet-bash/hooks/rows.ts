@@ -5,6 +5,8 @@ const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i
 
 export type ShotInfo = { width: number; height: number; bytes: number }
 
+const ENGINE_DRAWN = new Set(['AskUserQuestion', 'ExitPlanMode', 'EnterPlanMode', 'TodoWrite'])
+
 export function keepsResult(tool: string, output: unknown): boolean {
   return ENGINE_DRAWN.has(tool) || tool === 'SendUserFile' || (tool === 'Read' && (output as { type?: string } | undefined)?.type === 'image')
 }
@@ -30,8 +32,6 @@ const BROWSER_STEP = /^mcp__claude-in-chrome__(?!navigate$)/
 export function isQuietRead(tool: string, isFlaggedReadOnly: boolean): boolean {
   return isFlaggedReadOnly || READ_TOOLS.has(tool) || BROWSER_STEP.test(tool)
 }
-
-const ENGINE_DRAWN = new Set(['AskUserQuestion', 'ExitPlanMode', 'EnterPlanMode', 'TodoWrite'])
 
 type Fields = {
   command?: string
@@ -83,7 +83,7 @@ export function summary(tool: string, input: unknown, home: string): string | nu
       return fields.description ?? fields.command?.split('\n')[0] ?? ''
     case 'Read': {
       const { offset, limit } = fields
-      const range = offset === undefined ? '' : `:${offset}-${limit === undefined ? '' : offset + limit}`
+      const range = offset === undefined ? '' : `:${offset}-${limit === undefined ? '' : offset + limit - 1}`
       return `Read ${path}${range}`
     }
     case 'Edit':
@@ -132,11 +132,11 @@ export function failure(output: unknown): string {
   return exit ? `exit ${exit[1]}` : 'failed'
 }
 
-const PIPELINE_WAIT = /\(gitlab\/wait_for_pipeline\) failed/
+const PIPELINE_WAIT_TIMEOUT = /<task-id>([^<]+)<\/task-id>[\s\S]*\(gitlab\/wait_for_pipeline\) failed[\s\S]*Timed out waiting for terminal status/
 
-// A wait slice caps at 600 s and Claude re-arms it, so its timeout row is noise.
-export function isPipelineWaitTimeout(text: string, status: string | undefined): boolean {
-  return status === 'failed' && PIPELINE_WAIT.test(text)
+// A wait slice caps at 600 s and Claude re-arms it, so its timeout row is noise; the row's own text lacks the reason, the notification has it.
+export function pipelineWaitTimeoutId(notification: string): string | undefined {
+  return PIPELINE_WAIT_TIMEOUT.exec(notification)?.[1]
 }
 
 export type Box = { columns: number; rows: number }
@@ -155,14 +155,20 @@ export function isOversized(info: ShotInfo): boolean {
 }
 
 // A path starts at the start of a word, so the `//host/a.png` of a URL is not one.
-const PNG_PATHS = /(?<![^\s"'`()<>[\]{},;=])[^\s"'`()<>[\]{},;:\\]+\.png\b/gi
-const LEADING_CD = /^\s*cd\s+(\S+)\s*&&/
+const PNG_PATHS = /(?<![^\s"'`()<>[\]{},;=])[^\s"'`()<>[\]{},;:\\]+\.png(?![\w/-]|\.\w)/gi
+const LEADING_CD = /^\s*cd(?:\s+("[^"]*"|'[^']*'|[^\s&]+))?\s*&&/
 
-function resolve(dir: string, home: string, target: string): string {
-  const raw = target.replace(/^(['"])(.*)\1$/, '$2')
-  const path = raw === '~' || raw.startsWith('~/') ? home + raw.slice(1) : raw.startsWith('/') ? raw : `${dir}/${raw}`
+function expandHome(word: string): string {
+  return word.replace(/^\$(?:HOME|\{HOME\})(?=\/|$)/, '~')
+}
+
+function absolute(path: string, dir: string, home: string): string {
+  return path.startsWith('/') ? path : path === '~' || path.startsWith('~/') ? `${home}${path.slice(1)}` : `${dir}/${path}`
+}
+
+export function resolvePath(target: string, dir: string, home: string): string {
   const parts: string[] = []
-  for (const part of path.split('/')) {
+  for (const part of absolute(expandHome(target.replace(/^(['"])(.*)\1$/, '$2')), dir, home).split('/')) {
     if (part === '..') {
       parts.pop()
     } else if (part !== '' && part !== '.') {
@@ -175,9 +181,12 @@ function resolve(dir: string, home: string, target: string): string {
 // Where a command's relative paths point: the session cwd, moved by any `cd X &&` it starts with.
 export function commandDir(command: string, cwd: string, home: string): string {
   let dir = cwd
+  let previous = cwd
   let rest = command
   for (let cd = LEADING_CD.exec(rest); cd !== null; cd = LEADING_CD.exec(rest)) {
-    dir = resolve(dir, home, cd[1] ?? '~')
+    const next = cd[1] === '-' ? previous : resolvePath(cd[1] ?? '~', dir, home)
+    previous = dir
+    dir = next
     rest = rest.slice(cd[0].length)
   }
   return dir
@@ -198,7 +207,7 @@ export function fit(info: { width: number; height: number }, box: Box): Box {
 // `text` is JSON, so its escapes (`\n`, `\"`, `\/`) are undone before paths are cut out of it.
 export function pngPathsIn(text: string, dir: string, home: string): string[] {
   const paths = text.replace(/\\\//g, '/').replace(/\\[nrt"\\]/g, ' ').match(PNG_PATHS) ?? []
-  return [...new Set(paths.map(path => resolve(dir, home, path)))]
+  return [...new Set(paths.map(path => resolvePath(path, dir, home)))]
 }
 
 export function thumbArgs(args: string, home: string): { file: string; size: ThumbSize } | { pasted: true } {
@@ -208,6 +217,22 @@ export function thumbArgs(args: string, home: string): { file: string; size: Thu
     return { pasted: true }
   }
   return { file: file.replace(/^~(?=\/|$)/, home), size: file === trimmed ? 'small' : 'large' }
+}
+
+const THUMB_RUN = /^thumb #(\d+): /
+
+export function thumbText(run: number, file: string): string {
+  return `thumb #${run}: ${file}`
+}
+
+export function thumbKey(run: number | string): string {
+  return `cmd:${run}`
+}
+
+// Identical `/thumb x.png` runs each keep their own image, so a later one does not redraw an earlier row.
+export function thumbRunKey(text: string): string | undefined {
+  const run = THUMB_RUN.exec(text)
+  return run ? thumbKey(run[1] ?? '') : undefined
 }
 
 // The newest call showing an unchanged image keeps it, so a Read checked before SendUserFile does not draw it twice.

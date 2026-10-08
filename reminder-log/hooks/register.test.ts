@@ -41,7 +41,7 @@ test('sends the attribution block once, then only when it changes', async ($, on
   expect(await send('attribution B')).toEqual({ text: 'attribution B' })
 })
 
-test('session start forgets tallies idle for 30 days and the old all-session tally', async ($, on) => {
+test('session start forgets tallies begun over 30 days ago and the old all-session tally', async ($, on) => {
   const store = new Map<string, unknown>([
     ['tally', record(undefined, 'a', 'engine', 'x', '2026-10-02T00:00:00Z')],
     ['tally:old', record(undefined, 'a', 'engine', 'x', '2026-09-01T00:00:00Z')],
@@ -54,4 +54,24 @@ test('session start forgets tallies idle for 30 days and the old all-session tal
   stubSession(on, store, Date.parse('2026-10-04T00:00:00Z'))
   await $.session.start?.({ cwd: '/', surface: null, isInteractive: false })
   expect([...store.keys()]).toEqual(['tally:recent', 'kept-attribution:recent'])
+})
+
+test('a compaction forgets the kept attribution block, so the next one is sent again', async ($, on) => {
+  on('prompt.attachment', ($, e) => ({ text: e.text }))
+  on('classic.SessionStart', () => ({}))
+  stubSession(on)
+  const send = (text: string) => $.prompt.attachment?.({ type: 'remote_session_change', text, origin: { kind: 'engine' } })
+  await send('attribution A')
+  await $.classic.SessionStart({ source: 'compact' } as never)
+  expect(await send('attribution A')).toEqual({ text: 'attribution A' })
+})
+
+test('/reminders reports only the last 30 days', async ($, on) => {
+  const store = new Map<string, unknown>([
+    ['tally:old', record(undefined, 'a', 'engine', 'x', '2026-09-01T00:00:00Z')],
+    ['tally:recent', record(undefined, 'b', 'engine', 'y', '2026-10-03T00:00:00Z')],
+  ])
+  stubSession(on, store, Date.parse('2026-10-04T00:00:00Z'))
+  const { text } = await $.command.run({ command: 'reminders', args: '' } as never)
+  expect(text).toStartWith('Reminders since 2026-10-03T00:00:00Z, 1 session(s)')
 })

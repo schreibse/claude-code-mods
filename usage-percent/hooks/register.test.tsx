@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { line } from './register'
+import { isGitPush, line } from './register'
 
 const text = (pieces: readonly { text: string }[]) => pieces.map(p => p.text).join('')
 
@@ -44,4 +44,12 @@ test('draws the usage in its own row under the hint line', async ($, on) => {
   expect(column?.props.flexDirection).toBe('column')
   expect(column?.text).toBe('? for shortcutsctx 34% | wk 86%')
   expect((await ui.find({ type: 'Text', text: /^86%$/ }))?.props.color).toBe('yellow')
+})
+
+test('a push counts with -C or -c options before it', () => {
+  expect(isGitPush('git push')).toBe(true)
+  expect(isGitPush('cd x && git -C ../repo push -u origin HEAD')).toBe(true)
+  expect(isGitPush('git -c core.sshCommand=ssh -C /r/repo push')).toBe(true)
+  expect(isGitPush('git pushx')).toBe(false)
+  expect(isGitPush('git log --grep push')).toBe(false)
 })

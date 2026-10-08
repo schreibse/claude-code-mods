@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { THUMB_BOXES, commandDir, diffStat, elapsed, failure, fit, isOversized, isPipelineWaitTimeout, isQuietRead, keepsResult, openFileUrl, pngPathsIn, shotMeta, shots, summary, supersede, thumbArgs } from './rows'
+import { THUMB_BOXES, commandDir, diffStat, elapsed, failure, fit, isOversized, isQuietRead, keepsResult, openFileUrl, pipelineWaitTimeoutId, pngPathsIn, resolvePath, shotMeta, shots, summary, supersede, thumbArgs, thumbKey, thumbRunKey, thumbText } from './rows'
 
 test('thumbnail paths link to the herdr open-file handler', () => {
   expect(openFileUrl('/tmp/a/sheet-2410.png')).toBe('http://localhost/open-file/tmp/a/sheet-2410.png')
@@ -21,7 +21,7 @@ test('durations show only for slow calls', () => {
 test('one-line summaries per tool', () => {
   expect(summary('Bash', { command: 'ls', description: 'List files' }, '/home/me')).toBe('List files')
   expect(summary('Bash', {}, '/home/me')).toBe('')
-  expect(summary('Read', { file_path: '/home/me/x.ts', offset: 10, limit: 5 }, '/home/me')).toBe('Read ~/x.ts:10-15')
+  expect(summary('Read', { file_path: '/home/me/x.ts', offset: 10, limit: 5 }, '/home/me')).toBe('Read ~/x.ts:10-14')
   expect(summary('Read', { file_path: '/home/me/x.ts', offset: 100 }, '/home/me')).toBe('Read ~/x.ts:100-')
   expect(summary('Read', { file_path: '/home/meg/x.ts' }, '/home/me')).toBe('Read /home/meg/x.ts')
   expect(summary('Read', { file_path: '/home/other/x.ts' }, '/home/me')).toBe('Read /home/other/x.ts')
@@ -69,10 +69,14 @@ test('reads are quiet: read tools always, others when the engine ran them read-o
   expect(isQuietRead('mcp__claude-in-chrome__navigate', false)).toBe(false)
 })
 
-test('only a failed pipeline wait is a timeout row', () => {
-  expect(isPipelineWaitTimeout('MCP task kry26csj (gitlab/wait_for_pipeline) failed', 'failed')).toBe(true)
-  expect(isPipelineWaitTimeout('MCP task kry26csj (gitlab/wait_for_pipeline) completed', 'completed')).toBe(false)
-  expect(isPipelineWaitTimeout('MCP task ab12 (gitlab/wait_for_job) failed', 'failed')).toBe(false)
+test('only a timed-out pipeline wait is a timeout notification', () => {
+  const notification = (summary: string, result: string) =>
+    `<task-notification>\n<task-id>kry26csjm</task-id>\n<status>failed</status>\n<summary>${summary}.</summary>\n<result>\n${result}\n</result>\n</task-notification>`
+  const timeout = 'Task failed: Timed out waiting for terminal status'
+  expect(pipelineWaitTimeoutId(notification('MCP task kry26csj (gitlab/wait_for_pipeline) failed', timeout))).toBe('kry26csjm')
+  expect(pipelineWaitTimeoutId(notification('MCP task kry26csj (gitlab/wait_for_pipeline) failed', 'Task failed: 401 Unauthorized'))).toBeUndefined()
+  expect(pipelineWaitTimeoutId(notification('MCP task kry26csj (gitlab/wait_for_pipeline) completed', 'ok'))).toBeUndefined()
+  expect(pipelineWaitTimeoutId(notification('MCP task ab12 (gitlab/wait_for_job) failed', timeout))).toBeUndefined()
 })
 
 test('thumbnails keep their aspect ratio inside the box', () => {
@@ -86,6 +90,8 @@ test('PNG paths are found in tool text, once each', () => {
   const text = JSON.stringify({ command: 'magick a.jpg ~/shots/b.png && cp /tmp/c.png /tmp/c.png', out: 'saved to /home/me/x/d.PNG.' })
   expect(pngPathsIn(text, '/r', '/home/me')).toEqual(['/home/me/shots/b.png', '/tmp/c.png', '/home/me/x/d.PNG'])
   expect(pngPathsIn('no images here, notes.md', '/r', '/home/me')).toEqual([])
+  expect(pngPathsIn('mv a.png.bak b.png_old c.png/x', '/r', '/home/me')).toEqual([])
+  expect(pngPathsIn('wrote a.png,b.png.', '/r', '/home/me')).toEqual(['/r/a.png', '/r/b.png'])
 })
 
 test('relative PNG paths resolve against the command directory, URLs are not paths', () => {
@@ -98,6 +104,21 @@ test('relative paths follow the cd a command starts with', () => {
   expect(commandDir('cd web && cd ./shots && magick a.jpg b.png', '/r', '/home/me')).toBe('/r/web/shots')
   expect(commandDir('cd ~/x && ls', '/r', '/home/me')).toBe('/home/me/x')
   expect(commandDir('magick a.jpg b.png && cd /tmp', '/r', '/home/me')).toBe('/r')
+  expect(commandDir('cd "my shots" && ls', '/r', '/home/me')).toBe('/r/my shots')
+  expect(commandDir("cd '$HOME/x' && cd ${HOME}/y && ls", '/r', '/home/me')).toBe('/home/me/y')
+  expect(commandDir('cd /tmp && cd - && ls', '/r', '/home/me')).toBe('/r')
+  expect(commandDir('cd && ls', '/r', '/home/me')).toBe('/home/me')
+})
+
+test('sent files resolve against the session cwd and home', () => {
+  expect(resolvePath('shot.png', '/r', '/home/me')).toBe('/r/shot.png')
+  expect(resolvePath('~/a/../shot.png', '/r', '/home/me')).toBe('/home/me/shot.png')
+  expect(resolvePath('/tmp/shot.png', '/r', '/home/me')).toBe('/tmp/shot.png')
+})
+
+test('each /thumb run has its own key', () => {
+  expect(thumbRunKey(thumbText(3, '/a/x.png'))).toBe(thumbKey(3))
+  expect(thumbRunKey('Not a readable PNG: /a/x.png')).toBeUndefined()
 })
 
 test('/thumb arguments pick the size and catch pasted images', () => {

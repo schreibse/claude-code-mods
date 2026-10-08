@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { choicesFor, handoverPath, isFresh, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
+import { choicesFor, expandHome, handoverPath, isFresh, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
 import type { Entry } from './rules'
 import type { Handover } from '../types'
 
@@ -16,6 +16,8 @@ const choices = atom({ plugin: 'handover', key: 'choices' } as const, null)
 
 // The key of the sentence last offered in the box; the next prompt sent spends it.
 let offered: string | null = null
+// The list the band and the last bare /handover numbered, so /handover N picks what was shown.
+let listed: Entry[] = []
 
 async function home($: EngineInterface): Promise<string> {
   return (await $.env.get('HOME')) ?? ''
@@ -41,7 +43,8 @@ async function remove($: EngineInterface, key: string): Promise<void> {
 }
 
 async function choicesHere($: EngineInterface): Promise<Entry[]> {
-  return choicesFor(await entries($), await $.session.root(), await $.clock.now())
+  listed = choicesFor(await entries($), await $.session.root(), await $.clock.now())
+  return listed
 }
 
 function suggest($: EngineInterface, key: string, text: string): void {
@@ -68,7 +71,8 @@ export const register: Register = on => {
     const dir = await home($)
     const sessionId = await $.session.id()
     const target = sessionPath(dir, sessionId)
-    if (dir === '' || (e.file_path !== handoverPath(dir) && e.file_path !== target)) {
+    const path = expandHome(e.file_path, dir)
+    if (dir === '' || (path !== handoverPath(dir) && path !== target)) {
       return next(e)
     }
     const result = await next({ ...e, file_path: target })
@@ -138,15 +142,16 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: PICK_COMMAND }, async ($, e) => {
-    const here = await choicesHere($)
+    const n = Number(e.args.trim())
+    const here = e.args.trim() === '' || listed.length === 0 ? await choicesHere($) : listed
+    const chosen = Number.isInteger(n) ? here[n - 1] : undefined
     if (here.length === 0) {
       return { text: 'No handover for this repo.' }
     }
-    const n = Number(e.args.trim())
-    if (!Number.isInteger(n) || n < 1 || n > here.length) {
+    if (chosen === undefined) {
+      await update($, choices, shown => (shown === null ? null : here.map(c => c.handover.text)))
       return { text: here.map((c, i) => `${i + 1}. ${c.handover.text}`).join('\n\n') }
     }
-    const chosen = here[n - 1]
     await update($, choices, () => null)
     suggest($, chosen.key, chosen.handover.text)
     return { text: `Handover ${n} waits in the prompt; Tab takes it.` }

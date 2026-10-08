@@ -131,3 +131,20 @@ test('/handover-copy copies the sentence and hides the band', async ($, on) => {
   expect(copied).toEqual([WORK])
   expect(await (await band($)).find({ type: 'Text', text: WORK })).toBeUndefined()
 })
+
+test('a literal ~ path still files the sentence per session', async ($, on) => {
+  const { writes } = home(on)
+  await $.tool.call({ tool: 'Write', file_path: '~/.claude/handover.md', content: WORK })
+  expect(writes).toEqual(['/home/me/.claude/handovers/s1.md'])
+})
+
+test('/handover N picks from the list shown, though another session wrote since', async ($, on) => {
+  const { clock, suggested, store } = home(on)
+  store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
+  await $.classic.SessionStart({ source: 'startup' } as never)
+  store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
+  await $.command.run({ command: 'handover', args: '1' } as never)
+  await clock.advance(500)
+  expect(suggested).toEqual([WORK])
+  expect((await $.command.run({ command: 'handover', args: '' } as never)).text).toBe(`1. ${ANALYZE}\n\n2. ${WORK}`)
+})

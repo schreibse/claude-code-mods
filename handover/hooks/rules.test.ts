@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { MAX_AGE_MS, choicesFor, handoverPath, isFresh, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
+import { MAX_AGE_MS, choicesFor, expandHome, handoverPath, isFresh, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
 
 test('the sentence is one line, without quote markers', () => {
   expect(sentenceOf('\n> PR #146 merged as 5fd98a4;\n> next is #132.\n')).toBe('PR #146 merged as 5fd98a4; next is #132.')
@@ -24,6 +24,8 @@ test('paths and keys are per session', () => {
   expect(storeKey('s1')).toBe('handover:s1')
   expect(sessionIdOf('handover:s1')).toBe('s1')
   expect(sessionIdOf('other')).toBeNull()
+  expect(expandHome('~/.claude/handover.md', '/home/me')).toBe('/home/me/.claude/handover.md')
+  expect(expandHome('/r/~/x', '/home/me')).toBe('/r/~/x')
 })
 
 test('the choices are this root\'s fresh sentences, newest first', () => {

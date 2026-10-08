@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { cardFrom, kindOf, label } from './cards'
+import { cardFrom, isGh, kindOf, label } from './cards'
 
 const MR = JSON.stringify({
   iid: 42,
@@ -65,7 +65,14 @@ test('a card is drawn under the row beneath it, and only when the call is done',
 })
 
 test('a gh pr merge without a URL still links the PR', () => {
-  const card = cardFrom('merged', '✓ Squashed and merged pull request octocat/hello#3 (mr-banner)\n')
+  const card = cardFrom('merged', '✓ Squashed and merged pull request octocat/hello#3 (mr-banner)\n', undefined, true)
   expect(card.url).toBe('https://github.com/octocat/hello/pull/3')
   expect(label(card)).toBe('PR MERGED')
+})
+
+test('an owner/repo#12 links GitHub only from a gh command', () => {
+  expect(isGh('git fetch && gh pr merge 3')).toBe(true)
+  expect(isGh('glab mr note 12 -m "see group/proj#12"')).toBe(false)
+  const card = cardFrom('reviewed', 'Added note to group/proj#12\n', undefined, isGh('glab mr note 12 -m ok'))
+  expect(card.url).toBe(undefined)
 })

@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, heavyScopes, invocations, isHeavy, isServe, parsePressure, refusal, scoped, segments, serveRefusal, serveScopes } from './rules'
+import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, heavyScopes, invocations, isHeavy, isServe, parsePressure, refusal, runningRefusal, scoped, segments, serveRefusal, serveScopes } from './rules'
 
 const GIB = 1024 ** 3
 const shell = { cwd: '/repo', home: '/home/u' }
@@ -15,7 +15,8 @@ test('nx affected and run-many need --parallel=1', () => {
   expect(refused('npx nx affected -t lint --parallel 1')).toBeNull()
 })
 
-test('a pnpm script with a :lite sibling, or a prefix that has one, is refused', () => {
+test('a pnpm script with its own :lite twin is refused', () => {
+  expect(refused('pnpm run test:e2e', { 'test:lite': 'x' })).toBeNull()
   expect(refused('pnpm run lint:affected', scripts)).toBe("use 'pnpm run lint:affected:lite' instead of 'lint:affected'.")
   expect(refused('pnpm test:affected', scripts)).toBe("use 'pnpm run test:affected:lite' instead of 'test:affected'.")
   expect(refused('pnpm --filter api run lint:affected', scripts)).toContain(':lite')
@@ -40,17 +41,19 @@ test('ci:local is refused', () => {
 })
 
 test('pkill -f / pgrep -f need a bracketed pattern, also inside $( )', () => {
-  for (const command of ['pkill -f "nx serve"', 'pgrep -af node', 'pgrep -fl node', 'pkill --full x', 'kill $(pgrep -f nx)', 'kill "$(pgrep -f nx)"', 'kill `pgrep -f nx`', 'pkill -f foo [x] bar']) {
+  for (const command of ['pkill -f "nx serve"', 'pgrep -af node', 'pgrep -fl node', 'pkill --full x', 'kill $(pgrep -f nx)', 'kill "$(pgrep -f nx)"', 'kill `pgrep -f nx`', 'pkill -f foo [x] bar', '/usr/bin/pkill -f nx', 'command pkill -f nx']) {
     expect(refused(command)).toContain('wrapper')
   }
   expect(refused("pkill -f '[n]x serve'")).toBeNull()
+  expect(refused("pkill -f '[n]x' -9")).toBeNull()
+  expect(refused("pkill -u me -f '[n]x'")).toBeNull()
   expect(refused('kill $(pgrep -f "[n]x serve")')).toBeNull()
   expect(refused('pgrep -x claude')).toBeNull()
   expect(refused('fuser -k 4700/tcp')).toBeNull()
 })
 
 test('jest runs, direct or as an nx test target, need a worker cap', () => {
-  for (const command of ['pnpm exec jest src/a.spec.ts', 'npx jest', 'npx nx test api', 'npx nx run api:test --testPathPatterns=x', 'nx run-many -t lint,test --parallel=1', 'pnpm --filter api exec jest', 'pnpm -C x exec jest', 'node node_modules/.bin/jest', 'sleep 1 & npx jest', '( npx jest )', 'if true; then npx jest; fi', '{ npx jest; }']) {
+  for (const command of ['pnpm exec jest src/a.spec.ts', 'npx jest', 'npx nx test api', 'npx nx run api:test --testPathPatterns=x', 'nx run-many -t lint,test --parallel=1', 'pnpm --filter api exec jest', 'pnpm -C x exec jest', 'node node_modules/.bin/jest', 'sleep 1 & npx jest', '( npx jest )', 'if true; then npx jest; fi', '{ npx jest; }', 'npm exec jest', 'npm exec -- jest x', 'npx jest --maxWorkers=100%', 'npx jest --maxWorkers 50%']) {
     expect(refused(command)).toContain('--maxWorkers')
   }
   for (const command of ['npx nx test api --maxWorkers=2', 'pnpm exec jest --runInBand', 'npx jest -i', 'npx jest -w 2', 'npx jest --max-workers=2', 'npx jest --listTests', 'npx jest --version']) {
@@ -83,6 +86,9 @@ test('segments split on operators and substitutions, never inside quotes', () =>
   expect(segments('a && b || c; d | e & f')).toEqual(['a', 'b', 'c', 'd', 'e', 'f'])
   expect(segments('echo "a && b" \'c; d\'')).toEqual(['echo "a && b" \'c; d\''])
   expect(segments('x "$(y z)" w')).toEqual(['x "', 'y z', '" w'])
+  expect(segments('git commit -m "Steps: 1) pkill -f nx"')).toEqual(['git commit -m "Steps: 1) pkill -f nx"'])
+  expect(segments('a "$(b "(c)")" d')).toEqual(['a "', 'b "(c)"', '" d'])
+  expect(refused('git commit -m "Steps: 1) pkill -f nx, 2) npx jest"')).toBeNull()
 })
 
 test('heavy: builds, tests, typechecks, compose up; not nx show, a cat or a :lite script', () => {
@@ -109,6 +115,11 @@ test('node commands are scoped once, leading cds stay outside, everything else i
   expect(scoped('git status')).toBe('git status')
   expect(scoped('rm -rf node_modules/.cache')).toBe('rm -rf node_modules/.cache')
   expect(scoped(scoped('cd a && npx nx build api'))).toBe(scoped('cd a && npx nx build api'))
+  expect(scoped('cd app; pnpm run build')).toBe(`cd app; ${wrap} 'pnpm run build'`)
+  expect(scoped('node_modules/.bin/jest -i')).toBe(`${wrap} 'node_modules/.bin/jest -i'`)
+  for (const command of ['glab mr create --title "Fix jest config"', 'git commit -m "bump node"', 'cd x; git log --grep pnpm']) {
+    expect(scoped(command)).toBe(command)
+  }
 })
 
 test('cgroup files parse; an unlimited or unreadable slice gives no reading', () => {
@@ -153,6 +164,12 @@ test('a third dev server is refused; serving is recognised however it is spelled
   expect(serve('pnpm nx build admin')).toBe(false)
   expect(serveRefusal(1)).toBeNull()
   expect(serveRefusal(2)).toContain('2 dev servers')
+  const twoJests = ps([
+    ['run-p1.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'],
+    ['run-p2.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'],
+  ])
+  expect(runningRefusal(invocations('pnpm nx serve api', shell), twoJests)).toBeNull()
+  expect(runningRefusal(invocations('npx nx build api', shell), twoJests)).toContain('2 heavy commands')
 })
 
 test('a third heavy command waits, with the count', () => {
@@ -171,6 +188,9 @@ test('a check-runner may run checks and log to /tmp, nothing that changes files,
     'git status --short',
     'git diff --stat',
     'rm -f /tmp/x/log',
+    'rm -f /tmp/x/a /tmp/x/b',
+    'cp libs/a.ts /tmp/a.bak',
+    'npx jest -i 2>/dev/null | tee /tmp/x/log',
   ]) {
     expect(checkRunnerRefusal(command)).toBeNull()
   }
@@ -187,6 +207,10 @@ test('a check-runner may run checks and log to /tmp, nothing that changes files,
     ['echo x > libs/a.ts', 'outside /tmp'],
     ['cat a | tee libs/a.ts', 'outside /tmp'],
     ['cp /tmp/a.bak libs/a.ts', 'outside /tmp'],
+    ['rm /tmp/x ~/repo/src/a.ts', 'outside /tmp'],
+    ['mv /tmp/x libs/a.ts', 'outside /tmp'],
+    ['tee -a /tmp/x libs/a.ts', 'outside /tmp'],
+    ['touch /tmp/x; touch libs/a.ts', 'outside /tmp'],
   ] as const) {
     expect(checkRunnerRefusal(command)).toContain(reason)
   }

@@ -17,9 +17,29 @@ export function pressureAvg10(pressureFile: string): number {
   return Number(/^some avg10=([\d.]+)/m.exec(pressureFile)?.[1] ?? 0)
 }
 
-// From `ps -eo pid,args`.
+// From `ps -eo pid,args`. A server of nx's default project, or of every project, shows as plain `serve`.
 export function serveProcesses(ps: string): ServeProcess[] {
-  return [...ps.matchAll(/^\s*(\d+)\s.*?\bnx (?:serve ([\w.-]+)|run ([\w.-]+):serve\b)/gm)].map(m => ({ pid: m[1] ?? '', project: m[2] ?? m[3] ?? '' }))
+  return [...ps.matchAll(/^\s*(\d+)\s.*?\bnx (.*)$/gm)].flatMap(m => servedProjects(m[2] ?? '').map(project => ({ pid: m[1] ?? '', project })))
+}
+
+function servedProjects(args: string): string[] {
+  const run = /^run ([\w.-]+):serve(?=[:\s]|$)/.exec(args)
+  if (run) {
+    return [run[1] ?? '']
+  }
+  const serve = /^serve(?=\s|$)(.*)/.exec(args)
+  if (serve) {
+    return [optionOf(serve[1] ?? '', 'project', 'p') ?? /^\s+(\w[\w.-]*)/.exec(serve[1] ?? '')?.[1] ?? 'serve']
+  }
+  if (/^run-many\b/.test(args) && /(?:^|,)serve(?:,|$)/.test(optionOf(args, 'targets', 't') ?? optionOf(args, 'target') ?? '')) {
+    return (optionOf(args, 'projects', 'p') ?? 'serve').split(',')
+  }
+  return []
+}
+
+function optionOf(args: string, name: string, short?: string): string | null {
+  const flag = short === undefined ? `--${name}` : `(?:--${name}|-${short})`
+  return new RegExp(`(?:^|\\s)${flag}(?:=|\\s+)([^\\s-][^\\s]*)`).exec(args)?.[1] ?? null
 }
 
 // From `pwdx <pid>...`: `1234: /dir` per line.

@@ -1,13 +1,16 @@
 import { test, expect } from 'claude-code/testing'
 import { hostOf, forgeOf, githubPipeline, gitlabPipeline, pipeline } from './pipeline'
 
-test('github.com remotes use gh, every other host glab', () => {
+test('github.com remotes use gh, Azure DevOps none, every other host glab', () => {
   expect(forgeOf('https://github.com/octocat/hello.git')).toBe('github')
   expect(forgeOf('git@github.com:octocat/hello.git')).toBe('github')
   expect(forgeOf('https://gitlab.example.com/acme/shop.git')).toBe('gitlab')
   expect(forgeOf('git@gitlab.example.org:x/y.git')).toBe('gitlab')
   expect(forgeOf('https://notgithub.com.example/x.git')).toBe('gitlab')
   expect(forgeOf('')).toBeNull()
+  expect(forgeOf('https://acme@dev.azure.com/acme/shop/_git/shop')).toBeNull()
+  expect(forgeOf('git@ssh.dev.azure.com:v3/acme/shop/shop')).toBeNull()
+  expect(forgeOf('https://acme.visualstudio.com/shop/_git/shop')).toBeNull()
 })
 
 test('the host comes from https and ssh remotes alike', () => {
@@ -23,14 +26,22 @@ test('gitlab pipelines: running stage, failed job names, blocked on a manual job
   expect(gitlabPipeline(JSON.stringify({ status: 'failed', jobs }))).toEqual({ state: 'failed', detail: 'lint' })
   expect(gitlabPipeline(JSON.stringify({ status: 'manual', jobs: [] }))).toEqual({ state: 'manual', detail: '' })
   expect(gitlabPipeline(JSON.stringify({ status: 'success', jobs: [] }))).toEqual({ state: 'passed', detail: '' })
-  expect(gitlabPipeline(JSON.stringify({ status: 'canceled' }))).toBeNull()
+  expect(gitlabPipeline(JSON.stringify({ status: 'canceled' }))).toEqual({ state: 'failed', detail: '' })
+  expect(gitlabPipeline(JSON.stringify({ status: 'skipped' }))).toBeNull()
 })
 
 test('github runs: in progress, success, failure', () => {
   expect(githubPipeline(JSON.stringify([{ status: 'in_progress', workflowName: 'CI' }]))).toEqual({ state: 'running', detail: 'CI' })
   expect(githubPipeline(JSON.stringify([{ status: 'completed', conclusion: 'success', workflowName: 'CI' }]))).toEqual({ state: 'passed', detail: '' })
   expect(githubPipeline(JSON.stringify([{ status: 'completed', conclusion: 'failure', workflowName: 'CI' }]))).toEqual({ state: 'failed', detail: 'CI' })
+  expect(githubPipeline(JSON.stringify([{ status: 'completed', conclusion: 'cancelled', workflowName: 'CI' }]))).toEqual({ state: 'failed', detail: 'CI' })
   expect(githubPipeline('[]')).toBeNull()
+})
+
+test('github runs waiting for an approval pause like a manual gitlab job', () => {
+  for (const run of [{ status: 'waiting' }, { status: 'pending' }, { status: 'action_required' }, { status: 'completed', conclusion: 'action_required' }]) {
+    expect(githubPipeline(JSON.stringify([{ ...run, workflowName: 'Deploy' }]))).toEqual({ state: 'manual', detail: 'Deploy' })
+  }
 })
 
 const text = (pieces: readonly { text: string }[]) => pieces.map(p => p.text).join('')

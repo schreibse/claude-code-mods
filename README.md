@@ -93,6 +93,8 @@ git tag `<mod>--v<version>`.
   ```
 - **What changed:** the mod's `CHANGELOG.md`. Read every version you skipped: a major version
   means you have to act (a new hook in `settings.json`, a new dependency, a removed command).
+- **Notified outside Claude Code:** on GitHub, Watch → Custom → Releases. Each release carries the
+  mod's changelog entry.
 - **From a clone:** `git -C ~/.claude/skills pull --ff-only`, then read the changelogs of the mods
   whose version moved (`git -C ~/.claude/skills diff ORIG_HEAD -- '*/.claude-plugin/plugin.json'`).
 
@@ -314,3 +316,5 @@ bumps it in the same commit:
 2. Add `## <version> — <date>` to `<mod>/CHANGELOG.md`, with an **Action needed** line on a major.
 3. `claude plugin validate --strict .` (the marketplace) and `claude plugin validate --strict <mod>`.
 4. Commit and push, then `claude plugin tag --push <mod>`.
+5. `gh release create <mod>--v<version> --verify-tag --title "<mod> <version>" --notes-file <entry>`,
+   with the new changelog entry as the notes; links in it must be absolute.

@@ -65,6 +65,8 @@ test('reads are quiet: read tools always, others when the engine ran them read-o
   expect(isQuietRead('Bash', true)).toBe(true)
   expect(isQuietRead('Bash', false)).toBe(false)
   expect(isQuietRead('Edit', false)).toBe(false)
+  expect(isQuietRead('mcp__claude-in-chrome__computer', false)).toBe(true)
+  expect(isQuietRead('mcp__claude-in-chrome__navigate', false)).toBe(false)
 })
 
 test('only a failed pipeline wait is a timeout row', () => {

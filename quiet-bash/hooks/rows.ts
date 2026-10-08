@@ -24,9 +24,11 @@ export function shotMeta(infos: readonly (ShotInfo | null)[]): string {
 }
 
 const READ_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LS'])
+// Browser steps come in dozens per task; only navigate says where the browser went.
+const BROWSER_STEP = /^mcp__claude-in-chrome__(?!navigate$)/
 
 export function isQuietRead(tool: string, isFlaggedReadOnly: boolean): boolean {
-  return isFlaggedReadOnly || READ_TOOLS.has(tool)
+  return isFlaggedReadOnly || READ_TOOLS.has(tool) || BROWSER_STEP.test(tool)
 }
 
 const ENGINE_DRAWN = new Set(['AskUserQuestion', 'ExitPlanMode', 'EnterPlanMode', 'TodoWrite'])

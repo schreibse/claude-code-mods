@@ -44,6 +44,10 @@
     {
       "name": "stack-down",
       "source": "./stack-down"
+    },
+    {
+      "name": "review-walk",
+      "source": "./review-walk"
     }
   ]
 }

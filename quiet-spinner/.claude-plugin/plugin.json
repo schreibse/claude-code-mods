@@ -2,5 +2,9 @@
   "name": "quiet-spinner",
   "version": "0.1.0",
   "description": "Plain words for the turn spinner and the turn-duration line",
-  "author": { "name": "Stephan Schreiber" }
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/quiet-spinner",
+  "repository": "https://github.com/schreibse/claude-code-mods"
 }

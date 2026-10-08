@@ -2,6 +2,10 @@
   "name": "usage-percent",
   "version": "0.1.0",
   "description": "A row under the prompt: context, 5-hour and weekly usage; in Nx repos also memory, the session's nx serve projects and the branch's pipeline",
-  "author": { "name": "Stephan Schreiber" },
-  "types": "./types/index.d.ts"
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "types": "./types/index.d.ts",
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/usage-percent",
+  "repository": "https://github.com/schreibse/claude-code-mods"
 }

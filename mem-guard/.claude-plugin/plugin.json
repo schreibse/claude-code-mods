@@ -2,5 +2,9 @@
   "name": "mem-guard",
   "version": "0.1.0",
   "description": "Bash memory rules: Node commands run in claude-cmd.slice, and runs that would starve the machine are refused",
-  "author": { "name": "Stephan Schreiber" }
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/mem-guard",
+  "repository": "https://github.com/schreibse/claude-code-mods"
 }

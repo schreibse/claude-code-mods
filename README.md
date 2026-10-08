@@ -40,7 +40,19 @@ Three mods call out on their own:
 
 ## Install
 
-Claude Code loads every plugin folder under `~/.claude/skills/` at session start.
+**From the marketplace** (gets updates; herdr-notify and herdr-link-toast are not in it):
+
+```sh
+claude plugin marketplace add schreibse/claude-code-mods
+claude plugin install quiet-bash@schreibse-mods   # per mod
+```
+
+Then turn on updates: `/plugin` → Marketplaces → `schreibse-mods` → Enable auto-update. See
+[Updates](#updates).
+
+**From a clone**, to adapt a mod or work on it. Claude Code loads every plugin folder under
+`~/.claude/skills/` at session start. Don't install the same mod from the marketplace too: the
+installed copy silently replaces the folder.
 
 - **Empty `~/.claude/skills`:** clone straight into it:
   ```sh
@@ -54,7 +66,8 @@ Claude Code loads every plugin folder under `~/.claude/skills/` at session start
 
 New sessions pick them up; a running one needs `/exit` and `claude --continue`.
 
-**Leave a mod out:** delete or unlink its folder. **Try one for a single session:**
+**Leave a mod out:** `claude plugin uninstall <mod>@schreibse-mods`, or delete or unlink its
+folder. **Try one for a single session:**
 `claude --plugin-dir ~/src/claude-code-mods/<mod>`.
 
 **Where they run.** Built and used only in the terminal CLI on Fedora (Linux, systemd, cgroup v2).
@@ -65,6 +78,23 @@ for what each mod needs.
 **This repo is the skills folder itself**, so `.gitignore` ignores everything and re-includes each
 mod: a new mod needs a `!/<name>/` line or git won't see it. `.claude-plugin/types/` is generated
 by the engine and stays untracked.
+
+## Updates
+
+Each mod has its own version (`plugin.json`) and a `CHANGELOG.md` in its folder; each release is a
+git tag `<mod>--v<version>`.
+
+- **Get them:** with auto-update on, Claude Code updates the mods after a session's first message
+  and says `Plugin updated: <mod> · Run /reload-plugins to apply`. Without it nothing tells you;
+  check by hand:
+  ```sh
+  claude plugin marketplace update schreibse-mods
+  claude plugin update quiet-bash@schreibse-mods   # per mod; "already at the latest version" if none
+  ```
+- **What changed:** the mod's `CHANGELOG.md`. Read every version you skipped: a major version
+  means you have to act (a new hook in `settings.json`, a new dependency, a removed command).
+- **From a clone:** `git -C ~/.claude/skills pull --ff-only`, then read the changelogs of the mods
+  whose version moved (`git -C ~/.claude/skills diff ORIG_HEAD -- '*/.claude-plugin/plugin.json'`).
 
 ## redact: secrets as tokens
 
@@ -257,7 +287,7 @@ dev-server rules only work with the real project names: read them from the repo
 | coderabbit-band, usage-percent | any remote that isn't GitHub (or Azure) is taken for GitLab | `hooks/register.tsx` |
 | herdr-notify | Ghostty's desktop entry `com.mitchellh.ghostty` | `notify.sh` |
 
-**5. Install and check.** Install as above, then run `claude plugin validate <mod>` and
+**5. Install and check.** Install as above (from a clone when you adapted a mod: an update replaces a marketplace copy), then run `claude plugin validate <mod>` and
 `claude plugin test <mod>` for each mod you install. Start a new session and check what the person
 should now see: the usage row, a tool row with `✓`, and for redact, `redacted 0` in the status line.
 
@@ -273,3 +303,14 @@ tsc -p <mod>                   # once the engine has laid .claude-plugin/types/
 ```
 
 Edits in `~/.claude/skills` hot-reload into running sessions that loaded the mod.
+
+### Releasing a mod
+
+Marketplace users only get a change once the mod's `version` moves, so a change meant for them
+bumps it in the same commit:
+
+1. Bump `version` in `<mod>/.claude-plugin/plugin.json`: major when users must act, minor for a
+   feature, patch for a fix.
+2. Add `## <version> — <date>` to `<mod>/CHANGELOG.md`, with an **Action needed** line on a major.
+3. `claude plugin validate --strict .` (the marketplace) and `claude plugin validate --strict <mod>`.
+4. Commit and push, then `claude plugin tag --push <mod>`.

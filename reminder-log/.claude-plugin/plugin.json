@@ -2,5 +2,9 @@
   "name": "reminder-log",
   "version": "0.1.0",
   "description": "Tallies the reminders Claude Code injects for the model, per session; drops the token counter and repeated attribution blocks; /reminders prints the last 30 days",
-  "author": { "name": "Stephan Schreiber" }
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/reminder-log",
+  "repository": "https://github.com/schreibse/claude-code-mods"
 }

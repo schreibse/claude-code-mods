@@ -2,6 +2,10 @@
   "name": "mr-banner",
   "version": "0.1.0",
   "description": "A colored card with a link under each MR/PR created, merged, approved or reviewed",
-  "author": { "name": "Stephan Schreiber" },
-  "types": "./types/index.d.ts"
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "types": "./types/index.d.ts",
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/mr-banner",
+  "repository": "https://github.com/schreibse/claude-code-mods"
 }

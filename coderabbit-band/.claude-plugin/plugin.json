@@ -2,6 +2,10 @@
   "name": "coderabbit-band",
   "version": "0.1.0",
   "description": "A band above the prompt with the open CodeRabbit threads and nitpicks of the branch's MR",
-  "author": { "name": "Stephan Schreiber" },
-  "types": "./types/index.d.ts"
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "types": "./types/index.d.ts",
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/coderabbit-band",
+  "repository": "https://github.com/schreibse/claude-code-mods"
 }

@@ -1,1 +1,10 @@
-{ "name": "stack-down", "version": "0.1.0", "description": "On /clear and exit, stops the session repo's nx processes and brings its Compose projects down." }
+{
+  "name": "stack-down",
+  "version": "0.1.0",
+  "description": "On /clear and exit, stops the session repo's nx processes and brings its Compose projects down.",
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/stack-down",
+  "repository": "https://github.com/schreibse/claude-code-mods"
+}

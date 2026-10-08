@@ -5,5 +5,7 @@
   "author": {
     "name": "Stephan Schreiber"
   },
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/handover",
+  "repository": "https://github.com/schreibse/claude-code-mods"
 }

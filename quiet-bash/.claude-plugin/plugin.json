@@ -2,6 +2,10 @@
   "name": "quiet-bash",
   "version": "0.1.0",
   "description": "One-line tool rows, tool output hidden, inline PNG thumbnails; /quiet shows everything, /thumb shows a PNG",
-  "author": { "name": "Stephan Schreiber" },
-  "types": "./types/index.d.ts"
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "types": "./types/index.d.ts",
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/quiet-bash",
+  "repository": "https://github.com/schreibse/claude-code-mods"
 }

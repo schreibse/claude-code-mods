@@ -1,0 +1,49 @@
+{
+  "name": "schreibse-mods",
+  "description": "Claude Code mods: quieter transcript, usage row, MR cards, secret redaction, memory guard",
+  "owner": {
+    "name": "Stephan Schreiber"
+  },
+  "plugins": [
+    {
+      "name": "quiet-bash",
+      "source": "./quiet-bash"
+    },
+    {
+      "name": "quiet-spinner",
+      "source": "./quiet-spinner"
+    },
+    {
+      "name": "usage-percent",
+      "source": "./usage-percent"
+    },
+    {
+      "name": "reminder-log",
+      "source": "./reminder-log"
+    },
+    {
+      "name": "mr-banner",
+      "source": "./mr-banner"
+    },
+    {
+      "name": "coderabbit-band",
+      "source": "./coderabbit-band"
+    },
+    {
+      "name": "redact",
+      "source": "./redact"
+    },
+    {
+      "name": "mem-guard",
+      "source": "./mem-guard"
+    },
+    {
+      "name": "handover",
+      "source": "./handover"
+    },
+    {
+      "name": "stack-down",
+      "source": "./stack-down"
+    }
+  ]
+}

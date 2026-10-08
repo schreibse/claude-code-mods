@@ -2,6 +2,10 @@
   "name": "redact",
   "version": "0.1.0",
   "description": "Secrets found by betterleaks reach the model as ‹secret:…› tokens; Write/Edit restore them, other tools refuse them",
-  "author": { "name": "Stephan Schreiber" },
-  "types": "./types/index.d.ts"
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "types": "./types/index.d.ts",
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/redact",
+  "repository": "https://github.com/schreibse/claude-code-mods"
 }

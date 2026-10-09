@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { MAX_AGE_MS, choicesFor, expandHome, handoverPath, isFresh, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
+import { MAX_AGE_MS, choicesFor, dropIndex, expandHome, handoverPath, isFresh, isPastedIn, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
 
 test('the sentence is one line, without quote markers', () => {
   expect(sentenceOf('\n> PR #146 merged as 5fd98a4;\n> next is #132.\n')).toBe('PR #146 merged as 5fd98a4; next is #132.')
@@ -32,4 +32,19 @@ test('the choices are this root\'s fresh sentences, newest first', () => {
   const entry = (key: string, at: number, root = '/r/repo') => ({ key, handover: { text: key, at, root } })
   const entries = [entry('a', 10), entry('b', 30), entry('c', 20, '/r/other'), entry('d', -MAX_AGE_MS)]
   expect(choicesFor(entries, '/r/repo', 40).map(e => e.key)).toEqual(['b', 'a'])
+})
+
+test('a pasted sentence is found however it was rewrapped', () => {
+  expect(isPastedIn('PR #146 merged\n  as 5fd98a4; next is #132.', 'PR #146 merged as 5fd98a4; next is #132.')).toBe(true)
+  expect(isPastedIn('PR #146 merged as 5fd98a4.', 'PR #146 merged as 5fd98a4; next is #132.')).toBe(false)
+  expect(isPastedIn('anything', '')).toBe(false)
+})
+
+test('/handover drop N names an entry, nothing else does', () => {
+  expect(dropIndex('drop 2')).toBe(2)
+  expect(dropIndex(' drop  10 ')).toBe(10)
+  expect(dropIndex('2')).toBeNull()
+  expect(dropIndex('drop')).toBeNull()
+  expect(dropIndex('drop 0')).toBeNull()
+  expect(dropIndex('drop 2x')).toBeNull()
 })

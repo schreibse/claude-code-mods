@@ -38,6 +38,19 @@ export function choicesFor(entries: readonly Entry[], root: string, now: number)
     .sort((a, b) => b.handover.at - a.handover.at)
 }
 
+const oneLine = (text: string): string => text.trim().replace(/\s+/g, ' ')
+
+// A sentence pasted by hand is spent like one taken with Tab, however the terminal rewrapped it.
+export function isPastedIn(prompt: string, sentence: string): boolean {
+  return sentence !== '' && oneLine(prompt).includes(oneLine(sentence))
+}
+
+// `/handover drop N` names an entry of the list; anything else is a pick or a listing.
+export function dropIndex(args: string): number | null {
+  const match = /^drop\s+([1-9]\d*)$/.exec(args.trim())
+  return match === null ? null : Number(match[1])
+}
+
 // The skill writes the sentence alone; a quote marker or surrounding blank lines are not part of it.
 // A leading `!` (a GitLab MR ref) would send the pasted prompt to bash, so it gets a word in front.
 export function sentenceOf(content: string): string {

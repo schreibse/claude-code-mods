@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { choicesFor, expandHome, handoverPath, isFresh, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
+import { choicesFor, dropIndex, expandHome, handoverPath, isFresh, isPastedIn, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
 import type { Entry } from './rules'
 import type { Handover } from '../types'
 
@@ -45,6 +45,12 @@ async function remove($: EngineInterface, key: string): Promise<void> {
 async function choicesHere($: EngineInterface): Promise<Entry[]> {
   listed = choicesFor(await entries($), await $.session.root(), await $.clock.now())
   return listed
+}
+
+// Numbers shift once an entry leaves, so the list and a band showing it are renumbered together.
+async function relist($: EngineInterface): Promise<void> {
+  const here = await choicesHere($)
+  await update($, choices, shown => (shown === null || here.length === 0 ? null : here.map(c => c.handover.text)))
 }
 
 function suggest($: EngineInterface, key: string, text: string): void {
@@ -118,12 +124,19 @@ export const register: Register = on => {
       offered = null
       await remove($, key)
     }
+    const pasted = (await entries($)).filter(({ handover }) => isPastedIn(e.text, handover.text))
+    for (const { key } of pasted) {
+      await remove($, key)
+    }
+    if (pasted.length > 0) {
+      await relist($)
+    }
     return next(e)
   })
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: COPY_COMMAND, description: 'Copy the handover sentence and hide its band' })
-    await $.command.register({ name: PICK_COMMAND, description: 'List this repo\'s handovers; /handover N puts one in the prompt' })
+    await $.command.register({ name: PICK_COMMAND, description: 'List this repo\'s handovers; /handover N puts one in the prompt, /handover drop N removes it' })
     return next(e)
   })
 
@@ -142,11 +155,17 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: PICK_COMMAND }, async ($, e) => {
-    const n = Number(e.args.trim())
+    const dropped = dropIndex(e.args)
+    const n = dropped ?? Number(e.args.trim())
     const here = e.args.trim() === '' || listed.length === 0 ? await choicesHere($) : listed
     const chosen = Number.isInteger(n) ? here[n - 1] : undefined
     if (here.length === 0) {
       return { text: 'No handover for this repo.' }
+    }
+    if (dropped !== null && chosen !== undefined) {
+      await remove($, chosen.key)
+      await relist($)
+      return { text: `Handover ${dropped} dropped.` }
     }
     if (chosen === undefined) {
       await update($, choices, shown => (shown === null ? null : here.map(c => c.handover.text)))
@@ -181,7 +200,7 @@ export const register: Register = on => {
           <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor="cyan">
             <Box>
               <Text color="cyan" bold>handovers for this repo </Text>
-              <Text dimColor>/{PICK_COMMAND} N puts one in the prompt</Text>
+              <Text dimColor>/{PICK_COMMAND} N puts one in the prompt · /{PICK_COMMAND} drop N removes it</Text>
             </Box>
             {listed.map((t, i) => (
               <Text key={String(i)}>{`${i + 1}. ${preview(t)}`}</Text>

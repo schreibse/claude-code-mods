@@ -33,6 +33,14 @@ must keep notifications rows to ids and counts because the owner role reads them
    it). The handover mod files it under `~/.claude/handovers/<session id>.md`, one per session, so
    parallel sessions never overwrite each other. It shows a band above the prompt (`/handover-copy`
    copies it), and after `/clear` this session's sentence waits in the prompt (Tab takes it). A new
-   terminal lists the repo's open sentences instead; `/handover N` puts one in the prompt.
+   terminal lists the repo's open sentences instead; `/handover N` puts one in the prompt, and
+   `/handover drop N` removes one. A sentence sent in a prompt, by Tab or pasted, leaves the list.
 3. In chat, show it as a quote under "Handover for a new session:", then say in one line what is
    left to clean up (a local branch, a worktree) and ask before deleting any of it.
+
+## "Handover N" from the user
+
+It is line N of the band, which you cannot see. The list is the mod's store
+(`~/.claude/plugins/store/handover_*.json`): the entries whose `root` is this session's root,
+newest first. Never answer it from `~/.claude/handovers/`, which holds every repo's files and can
+lag the store. When one turns out to be done, say so and suggest `/handover drop N`.

@@ -148,3 +148,27 @@ test('/handover N picks from the list shown, though another session wrote since'
   expect(suggested).toEqual([WORK])
   expect((await $.command.run({ command: 'handover', args: '' } as never)).text).toBe(`1. ${ANALYZE}\n\n2. ${WORK}`)
 })
+
+test('a sentence pasted by hand is spent, in any repo', async ($, on) => {
+  const { removed, store } = home(on)
+  store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
+  store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/other' })
+  await $.prompt.submit({ text: `continue:\n${ANALYZE}` } as never)
+  expect(removed).toEqual(['/home/me/.claude/handovers/s2.md'])
+  expect([...store.keys()]).toEqual(['handover:s1'])
+})
+
+test('/handover drop N removes that entry and renumbers the band', async ($, on) => {
+  const { removed, store } = home(on)
+  store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
+  store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
+  await $.classic.SessionStart({ source: 'startup' } as never)
+  expect((await $.command.run({ command: 'handover', args: 'drop 1' } as never)).text).toBe('Handover 1 dropped.')
+  expect(removed).toEqual(['/home/me/.claude/handovers/s2.md'])
+  expect([...store.keys()]).toEqual(['handover:s1'])
+  const ui = await band($)
+  expect(await ui.find({ type: 'Text', text: `1. ${WORK}` })).toBeDefined()
+  expect((await $.command.run({ command: 'handover', args: 'drop 1' } as never)).text).toBe('Handover 1 dropped.')
+  expect(await (await band($)).find({ type: 'Text', text: `1. ${WORK}` })).toBeUndefined()
+  expect((await $.command.run({ command: 'handover', args: 'drop 1' } as never)).text).toBe('No handover for this repo.')
+})

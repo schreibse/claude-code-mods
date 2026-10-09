@@ -1,5 +1,11 @@
 # handover changelog
 
+## 0.2.0 — 2026-10-09
+
+- A sentence pasted into a prompt by hand leaves the list, the same as one taken with Tab.
+- `/handover drop N` removes entry N and renumbers the band.
+- The skill says where "handover N" comes from: this repo's entries in the mod's store, not the files in `~/.claude/handovers/`.
+
 ## 0.1.1 — 2026-10-08
 
 - `/handover N` picks from the list it showed, so another session writing meanwhile can't shift the numbers.

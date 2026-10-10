@@ -35,8 +35,10 @@ must keep notifications rows to ids and counts because the owner role reads them
    copies it), and after `/clear` this session's sentence waits in the prompt (Tab takes it). A new
    terminal lists the repo's open sentences instead; `/handover N` puts one in the prompt, and
    `/handover drop N` removes one. A sentence sent in a prompt, by Tab or pasted, leaves the list.
-3. In chat, show it as a quote under "Handover for a new session:", then say in one line what is
-   left to clean up (a local branch, a worktree) and ask before deleting any of it.
+3. In chat, show it as a quote under "Handover for a new session:", and again in a fenced code
+   block: the band and Tab live only in the terminal, and the block's copy button is how the web and
+   phone clients take it. Then say in one line what is left to clean up (a local branch, a
+   worktree) and ask before deleting any of it.
 
 ## "Handover N" from the user
 

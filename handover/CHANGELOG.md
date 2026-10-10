@@ -1,5 +1,9 @@
 # handover changelog
 
+## 0.2.1 — 2026-10-10
+
+- The skill shows the sentence in a code block as well as the quote: the band and Tab are terminal-only, so the web and phone clients copy it from the block.
+
 ## 0.2.0 — 2026-10-09
 
 - A sentence pasted into a prompt by hand leaves the list, the same as one taken with Tab.

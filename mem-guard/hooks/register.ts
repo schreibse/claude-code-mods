@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { checkRunnerRefusal, crowdedRefusal, escapeRefusal, invocations, isHeavy, isServe, parsePressure, refusal, runningRefusal, scoped } from './rules'
+import { checkRunnerRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, invocations, isHeavy, isServe, nodeScripts, parsePressure, refusal, runningRefusal, scoped } from './rules'
 import type { Invocation, Pressure, ScriptsByDir } from './rules'
 
 const sliceDirs = new Map<string, string>()
@@ -59,6 +59,11 @@ async function scriptsOf($: EngineInterface, calls: readonly Invocation[]): Prom
   return Object.fromEntries(dirs.map((dir, i) => [dir, scripts[i] ?? {}]))
 }
 
+async function runsPlaywrightScript($: EngineInterface, calls: readonly Invocation[]): Promise<boolean> {
+  const sources = await Promise.all(nodeScripts(calls, home).map(file => $.fs.read(file).catch(() => '')))
+  return sources.some(source => drivesPlaywright(source ?? ''))
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await resolveSlice($, CMD_SLICE)
@@ -81,7 +86,7 @@ export const register: Register = on => {
     if (refused !== null) {
       return { deny: `mem-guard: ${refused}` }
     }
-    if (isHeavy(calls) || isServe(calls)) {
+    if (isHeavy(calls) || isServe(calls) || (await runsPlaywrightScript($, calls))) {
       const crowded = await crowdedSlice($)
       if (crowded !== null) {
         return { deny: `mem-guard: ${crowded}` }

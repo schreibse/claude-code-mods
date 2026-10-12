@@ -189,6 +189,22 @@ export function isHeavy(calls: readonly Invocation[]): boolean {
   )
 }
 
+const SCRIPT_RUNNERS = ['node', 'tsx', 'ts-node']
+const PLAYWRIGHT_IMPORT = /(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)['"](?:playwright(?:-core)?|@playwright\/test)(?:\/[^'"]*)?['"]/
+
+/** Script files run by `node`, `tsx` or `ts-node`; the caller reads them to see whether they drive a browser. */
+export function nodeScripts(calls: readonly Invocation[], home: string): string[] {
+  return calls.flatMap(({ call, dir }) => {
+    const [program = '', ...args] = words(call)
+    const file = SCRIPT_RUNNERS.includes(program.replace(/^.*\//, '')) ? args.find(arg => !arg.startsWith('-')) : undefined
+    return file !== undefined && /\.[cm]?[jt]s['"]?$/.test(file) ? [resolvePath(dir, home, file)] : []
+  })
+}
+
+export function drivesPlaywright(source: string): boolean {
+  return PLAYWRIGHT_IMPORT.test(source)
+}
+
 export function crowdedRefusal(pressure: Pressure, slice = 'claude-cmd.slice'): string | null {
   const used = pressure.usedBytes / GIB
   const max = pressure.maxBytes / GIB
@@ -238,9 +254,9 @@ export function parsePressure(current: string, max: string, pressure: string): P
 }
 
 const MAX_HEAVY_AT_ONCE = 2
-// A test runner, a build or an nx task; the nx daemon stays out, and a dev server is counted on its own.
+// A test runner, a build, an nx task or a browser Playwright launched; the nx daemon stays out, and a dev server is counted on its own.
 const HEAVY_PROCESS =
-  /\/jest(?:-cli)?\/bin\/|jest-worker\/build\/workers|\/vitest\/|playwright\/(?:cli\.js|lib\/common\/process)|\/typescript\/(?:bin|lib)\/tsc\b|\/compiler-cli\/bundles\/src\/bin\/ngc|nx\/dist\/bin\/run-executor\.js/
+  /\/jest(?:-cli)?\/bin\/|jest-worker\/build\/workers|\/vitest\/|playwright\/(?:cli\.js|lib\/common\/process)|\/ms-playwright\/|playwright_\w+dev_profile-|\/typescript\/(?:bin|lib)\/tsc\b|\/compiler-cli\/bundles\/src\/bin\/ngc|nx\/dist\/bin\/run-executor\.js/
 const SERVE = /\bnx(?:\.js)?\s+serve\b|:serve(?::\S+)?(?:\s|$)/
 
 /** Each scope or service in claude.slice, claude-cmd.slice included, with its processes' args, from `ps -eo cgroup=,args=`. */

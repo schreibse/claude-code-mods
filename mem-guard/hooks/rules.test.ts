@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, escapeRefusal, heavyScopes, invocations, isHeavy, isServe, parsePressure, refusal, runningRefusal, scoped, segments, serveRefusal, serveScopes } from './rules'
+import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, heavyScopes, invocations, isHeavy, isServe, nodeScripts, parsePressure, refusal, runningRefusal, scoped, segments, serveRefusal, serveScopes } from './rules'
 
 const GIB = 1024 ** 3
 const shell = { cwd: '/repo', home: '/home/u' }
@@ -100,6 +100,24 @@ test('heavy: builds, tests, typechecks, compose up, :lite sweeps too; not nx sho
   }
 })
 
+test('node, tsx and ts-node scripts are named for reading, resolved against cd and ~', () => {
+  const scripts = (command: string) => nodeScripts(invocations(command, shell), shell.home)
+  expect(scripts('node shoot.mjs --out /tmp/x')).toEqual(['/repo/shoot.mjs'])
+  expect(scripts('cd /tmp/s && node --enable-source-maps ./a.js; npx tsx ~/b.ts')).toEqual(['/tmp/s/a.js', '/home/u/b.ts'])
+  expect(scripts('node -e "1"')).toEqual([])
+  expect(scripts('node --version')).toEqual([])
+  expect(scripts('cat shoot.mjs')).toEqual([])
+})
+
+test('a script drives Playwright when it imports or requires it', () => {
+  for (const source of ["import { chromium } from 'playwright'", 'const { test } = require("@playwright/test")', "const pw = await import('playwright-core/lib/x')", "import{chromium}from'playwright'"]) {
+    expect(drivesPlaywright(source)).toBe(true)
+  }
+  for (const source of ["import x from 'playwright-mcp-helper'", '// playwright is not used here', "import { a } from './playwright'"]) {
+    expect(drivesPlaywright(source)).toBe(false)
+  }
+})
+
 test('a full or pressured command slice refuses, with the numbers', () => {
   expect(crowdedRefusal({ usedBytes: 4 * GIB, maxBytes: 8 * GIB, psiAvg10: 0 })).toBeNull()
   expect(crowdedRefusal({ usedBytes: 6.5 * GIB, maxBytes: 8 * GIB, psiAvg10: 0 })).toContain('6.5/8G')
@@ -159,6 +177,12 @@ test('heavy scopes: test runners, builds and nx tasks count once per scope; the 
   expect(heavyScopes('0::/user.slice/user-1000.slice/user@1000.service/app.slice/ec-admin-serve.service   node nx/dist/bin/run-executor.js')).toBe(0)
   expect(heavyScopes('0::/user.slice/user-1000.slice/user@1000.service/claude.slice/run-p9.scope   /usr/bin/node-24 /repo/node_modules/jest/bin/jest.js -i')).toBe(1)
   expect(heavyScopes('')).toBe(0)
+  expect(heavyScopes(ps([
+    ['run-p5.scope', 'node /tmp/s/shoot.mjs'],
+    ['run-p5.scope', '/home/u/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell --remote-debugging-pipe'],
+    ['run-p6.scope', '/usr/lib64/chromium-browser/chromium-browser --user-data-dir=/tmp/playwright_chromiumdev_profile-AbC123 --remote-debugging-pipe'],
+    ['run-p7.scope', 'node /tmp/s/plain.mjs'],
+  ]))).toBe(2)
 })
 
 test('dev servers are counted per scope, apart from heavy commands', () => {

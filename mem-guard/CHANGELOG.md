@@ -1,5 +1,10 @@
 # mem-guard changelog
 
+## 0.3.1 — 2026-10-12
+
+- A browser Playwright launched counts as a heavy command, so a `node` script driving Playwright is seen while it runs.
+- `node`, `tsx` or `ts-node` running a script that imports `playwright`, `playwright-core` or `@playwright/test` is gated like any other heavy command.
+
 ## 0.3.0 — 2026-10-12
 
 - A running dev server counts as one of the two heavy commands; starting one also needs a free heavy slot.

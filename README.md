@@ -161,10 +161,10 @@ The rules read what each part of a command runs (after `&&`, `|`, `;`, `&`, `$( 
 `bash -c '…'`, following `cd`), never words it only mentions, so a commit message saying
 `pkill -f` passes. Not looked into: `xargs`, `make`, `eval`, scripts.
 
-**At once,** counted per scope in `claude-cmd.slice` from one `ps` scan (skipped when `ps` fails):
+**At once,** counted per scope or service anywhere in `claude.slice` from one `ps` scan (skipped when `ps` fails):
 
-- at most 2 heavy commands (jest, vitest, Playwright, `tsc`, `ngc`, an nx task); the nx daemon and
-  dev servers don't count;
+- at most 2 heavy commands (jest, vitest, Playwright, a `node` script that imports Playwright, `tsc`, `ngc`, an nx task), a running dev server
+  included; the nx daemon doesn't count;
 - at most 2 dev servers (`nx serve`, `nx run x:serve`, a `serve*` script): the API and one app.
 
 A command counts as heavy for these checks when it runs one of those tools, `docker compose up`, or a

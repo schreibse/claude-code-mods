@@ -38,6 +38,11 @@ export function choicesFor(entries: readonly Entry[], root: string, now: number)
     .sort((a, b) => b.handover.at - a.handover.at)
 }
 
+export function dirOf(path: string): string {
+  const cut = path.lastIndexOf('/')
+  return cut > 0 ? path.slice(0, cut) : '/'
+}
+
 const oneLine = (text: string): string => text.trim().replace(/\s+/g, ' ')
 
 // A sentence pasted by hand is spent like one taken with Tab, however the terminal rewrapped it.

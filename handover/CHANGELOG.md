@@ -1,5 +1,11 @@
 # handover changelog
 
+## 0.3.0 — 2026-10-12
+
+- A sentence is filed under the git repo of the file the session wrote last (the plan file the skill updates first), not the folder the session started in: work in a repo from a session started in its parent folder now shows in that repo.
+- Outside any repo a sentence stays with the folder the session started in; a session started in a repo's subfolder lists the repo's sentences.
+- The band reads "handovers here", since the place can be a plain folder.
+
 ## 0.2.1 — 2026-10-10
 
 - The skill shows the sentence in a code block as well as the quote: the band and Tab are terminal-only, so the web and phone clients copy it from the block.

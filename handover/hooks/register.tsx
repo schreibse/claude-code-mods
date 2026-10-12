@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { choicesFor, dropIndex, expandHome, handoverPath, isFresh, isPastedIn, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
+import { choicesFor, dirOf, dropIndex, expandHome, handoverPath, isFresh, isPastedIn, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
 import type { Entry } from './rules'
 import type { Handover } from '../types'
 
@@ -13,6 +13,8 @@ const PREVIEW_CHARS = 160
 
 const pending = atom({ plugin: 'handover', key: 'pending' } as const, null)
 const choices = atom({ plugin: 'handover', key: 'choices' } as const, null)
+// The file the session last wrote: the skill updates the plan file, in the repo, just before the sentence.
+const lastEdit = atom({ plugin: 'handover', key: 'lastEdit' } as const, null)
 
 // The key of the sentence last offered in the box; the next prompt sent spends it.
 let offered: string | null = null
@@ -42,8 +44,20 @@ async function remove($: EngineInterface, key: string): Promise<void> {
   }
 }
 
+async function repoOf($: EngineInterface, dir: string): Promise<string | null> {
+  const found = await $.process.run(['git', '-C', dir, 'rev-parse', '--show-toplevel']).catch(() => null)
+  return found?.exitCode === 0 && found.stdout.trim() !== '' ? found.stdout.trim() : null
+}
+
+// A sentence belongs to the repo its work was in, which a session started in a parent folder only shows
+// through the files it wrote; outside any repo it stays with the folder the session started in.
+async function place($: EngineInterface, edited: string | null): Promise<string> {
+  const root = await $.session.root()
+  return (edited === null ? null : await repoOf($, dirOf(edited))) ?? (await repoOf($, root)) ?? root
+}
+
 async function choicesHere($: EngineInterface): Promise<Entry[]> {
-  listed = choicesFor(await entries($), await $.session.root(), await $.clock.now())
+  listed = choicesFor(await entries($), await place($, null), await $.clock.now())
   return listed
 }
 
@@ -79,16 +93,28 @@ export const register: Register = on => {
     const target = sessionPath(dir, sessionId)
     const path = expandHome(e.file_path, dir)
     if (dir === '' || (path !== handoverPath(dir) && path !== target)) {
-      return next(e)
+      const result = await next(e)
+      if (!result.isError) {
+        await update($, lastEdit, () => path)
+      }
+      return result
     }
     const result = await next({ ...e, file_path: target })
     if (result.isError) {
       return result
     }
     const text = sentenceOf(e.content)
-    const handover: Handover = { text, at: await $.clock.now(), root: await $.session.root() }
+    const handover: Handover = { text, at: await $.clock.now(), root: await place($, await read($, lastEdit)) }
     await $.store.set(storeKey(sessionId), handover)
     await update($, pending, () => text)
+    return result
+  })
+
+  on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
+    const result = await next(e)
+    if (!result.isError) {
+      await update($, lastEdit, () => e.file_path)
+    }
     return result
   })
 
@@ -136,7 +162,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: COPY_COMMAND, description: 'Copy the handover sentence and hide its band' })
-    await $.command.register({ name: PICK_COMMAND, description: 'List this repo\'s handovers; /handover N puts one in the prompt, /handover drop N removes it' })
+    await $.command.register({ name: PICK_COMMAND, description: 'List the handovers for this repo (or folder, outside a repo); /handover N puts one in the prompt, /handover drop N removes it' })
     return next(e)
   })
 
@@ -160,7 +186,7 @@ export const register: Register = on => {
     const here = e.args.trim() === '' || listed.length === 0 ? await choicesHere($) : listed
     const chosen = Number.isInteger(n) ? here[n - 1] : undefined
     if (here.length === 0) {
-      return { text: 'No handover for this repo.' }
+      return { text: 'No handover for this repo or folder.' }
     }
     if (dropped !== null && chosen !== undefined) {
       await remove($, chosen.key)
@@ -199,7 +225,7 @@ export const register: Register = on => {
         {listed !== null && (
           <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor="cyan">
             <Box>
-              <Text color="cyan" bold>handovers for this repo </Text>
+              <Text color="cyan" bold>handovers here </Text>
               <Text dimColor>/{PICK_COMMAND} N puts one in the prompt · /{PICK_COMMAND} drop N removes it</Text>
             </Box>
             {listed.map((t, i) => (

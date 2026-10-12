@@ -6,12 +6,12 @@ const ANALYZE = 'Analysis of #140 done; next is the write-up — read .claude/pl
 const DAY = 24 * 60 * 60 * 1000
 
 function home(on: Parameters<TestBody>[1]) {
-  const session = { id: 's1' }
+  const session = { id: 's1', root: '/r/repo' }
   const writes: string[] = []
   const removed: string[] = []
   const suggested: string[] = []
   on('env.get', () => ({ value: '/home/me' }) as never)
-  on('session.root', () => ({ value: '/r/repo' }) as never)
+  on('session.root', () => ({ value: session.root }) as never)
   on('session.id', () => ({ value: session.id }) as never)
   on('tool.call', (_, e) => {
     writes.push((e as { file_path: string }).file_path)
@@ -23,8 +23,14 @@ function home(on: Parameters<TestBody>[1]) {
     suggested.push(e.text)
     return { isShown: true } as never
   })
+  const repos = new Map<string, string>()
   on('process.run', (_, e) => {
-    removed.push((e as { argv: string[] }).argv.at(-1) ?? '')
+    const argv = (e as { argv: string[] }).argv
+    if (argv[0] === 'git') {
+      const repo = repos.get(argv[2] ?? '')
+      return { value: { exitCode: repo === undefined ? 128 : 0, stdout: repo === undefined ? '' : `${repo}\n`, stderr: '' } } as never
+    }
+    removed.push(argv.at(-1) ?? '')
     return { value: { exitCode: 0, stdout: '', stderr: '' } } as never
   })
   const store = new Map<string, unknown>()
@@ -43,7 +49,7 @@ function home(on: Parameters<TestBody>[1]) {
     const { Box } = $.ui.resolve(e)
     return <Box />
   })
-  return { clock: mock.clock(on, { now: 1_000 }), session, writes, removed, suggested, store }
+  return { clock: mock.clock(on, { now: 1_000 }), session, writes, removed, suggested, store, repos }
 }
 
 const band = ($: Parameters<TestBody>[0]) =>
@@ -170,5 +176,29 @@ test('/handover drop N removes that entry and renumbers the band', async ($, on)
   expect(await ui.find({ type: 'Text', text: `1. ${WORK}` })).toBeDefined()
   expect((await $.command.run({ command: 'handover', args: 'drop 1' } as never)).text).toBe('Handover 1 dropped.')
   expect(await (await band($)).find({ type: 'Text', text: `1. ${WORK}` })).toBeUndefined()
-  expect((await $.command.run({ command: 'handover', args: 'drop 1' } as never)).text).toBe('No handover for this repo.')
+  expect((await $.command.run({ command: 'handover', args: 'drop 1' } as never)).text).toBe('No handover for this repo or folder.')
+})
+
+test('a sentence is filed under the repo of the file the session wrote last', async ($, on) => {
+  const { store, repos } = home(on)
+  repos.set('/r/repo/web/.claude/plans', '/r/repo/web')
+  await $.tool.call({ tool: 'Edit', file_path: '/r/repo/web/.claude/plans/132.md', old_string: 'a', new_string: 'b' })
+  await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/handover.md', content: WORK })
+  expect((store.get('handover:s1') as { root: string }).root).toBe('/r/repo/web')
+})
+
+test('outside any repo a sentence stays with the folder the session started in', async ($, on) => {
+  const { store } = home(on)
+  await $.tool.call({ tool: 'Write', file_path: '/home/me/notes.md', content: 'notes' })
+  await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/handover.md', content: WORK })
+  expect((store.get('handover:s1') as { root: string }).root).toBe('/r/repo')
+})
+
+test('a session started inside a repo lists the repo\'s sentences', async ($, on) => {
+  const { session, store, repos } = home(on)
+  session.root = '/r/repo/web/src'
+  repos.set('/r/repo/web/src', '/r/repo/web')
+  store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo/web' })
+  store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
+  expect((await $.command.run({ command: 'handover', args: '' } as never)).text).toBe(`1. ${WORK}`)
 })

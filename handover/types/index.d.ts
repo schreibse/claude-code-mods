@@ -2,6 +2,6 @@ export type Handover = { text: string; at: number; root: string }
 
 declare module 'claude-code' {
   interface PluginState {
-    handover: { pending: string | null; choices: string[] | null }
+    handover: { pending: string | null; choices: string[] | null; lastEdit: string | null }
   }
 }

@@ -5,6 +5,8 @@ export type Invocation = { line: string; tool: string; call: string; script: str
 
 const GIB = 1024 ** 3
 const FULL_SHARE = 0.75
+// Every session shares claude.slice; past its MemoryHigh the kernel throttles them all.
+const SESSIONS_FULL_SHARE = 0.85
 const PSI_LIMIT = 20
 
 const HEAVY_TOOLS = ['nx', 'jest', 'vitest', 'playwright', 'tsc', 'ngc']
@@ -182,18 +184,33 @@ export function isHeavy(calls: readonly Invocation[]): boolean {
   return calls.some(
     ({ line, tool, call, script }) =>
       (HEAVY_TOOLS.includes(tool) && !NX_LIGHT.test(call)) ||
-      (script !== null && /^(test|build|lint|typecheck|e2e|serve)/.test(script) && !script.endsWith(':lite')) ||
+      (script !== null && /^(test|build|lint|typecheck|e2e|serve)/.test(script)) ||
       /^docker(-compose|\s+compose)\b.*\sup\b/.test(line),
   )
 }
 
-export function crowdedRefusal(pressure: Pressure): string | null {
+export function crowdedRefusal(pressure: Pressure, slice = 'claude-cmd.slice'): string | null {
   const used = pressure.usedBytes / GIB
   const max = pressure.maxBytes / GIB
-  if (pressure.usedBytes <= pressure.maxBytes * FULL_SHARE && pressure.psiAvg10 <= PSI_LIMIT) {
+  const share = slice === 'claude-cmd.slice' ? FULL_SHARE : SESSIONS_FULL_SHARE
+  if (pressure.usedBytes <= pressure.maxBytes * share && pressure.psiAvg10 <= PSI_LIMIT) {
     return null
   }
-  return `claude-cmd.slice is at ${used.toFixed(1)}/${max.toFixed(0)}G, pressure ${pressure.psiAvg10.toFixed(0)}%. Wait for a running build or test to finish, or push and let CI run it.`
+  return `${slice} is at ${used.toFixed(1)}/${Number(max.toFixed(1))}G, pressure ${pressure.psiAvg10.toFixed(0)}%. Wait for a running build or test to finish, stop a dev server you are not using, or push and let CI run it.`
+}
+
+const BUDGET_SLICE = /\s--slice[= ]claude(?:-cmd)?\.slice(?=\s|$)/
+const NODE_TOOL_WORD = new RegExp(String.raw`(?:^|[\s'"/])(?:${NODE_TOOLS.join('|')})(?=[\s'"]|$)`)
+
+/** A unit started without a claude slice lands in app.slice, outside the budget every session shares. */
+export function escapeRefusal(command: string): string | null {
+  const escapes = segments(command).some(part => {
+    const line = part.replace(PREFIX, '')
+    return /^systemd-run\b/.test(line) && !BUDGET_SLICE.test(line) && NODE_TOOL_WORD.test(line.replace(/^systemd-run\b/, ''))
+  })
+  return escapes
+    ? 'systemd-run without --slice=claude.slice puts a Node tool outside the memory budget every session shares. Run it plainly (mem-guard scopes it), or give a long-lived server --slice=claude.slice.'
+    : null
 }
 
 function runsNode({ line, tool }: Invocation): boolean {
@@ -221,16 +238,16 @@ export function parsePressure(current: string, max: string, pressure: string): P
 }
 
 const MAX_HEAVY_AT_ONCE = 2
-// A test runner, a build or an nx task; the nx daemon and a dev server stay out, they live for hours.
+// A test runner, a build or an nx task; the nx daemon stays out, and a dev server is counted on its own.
 const HEAVY_PROCESS =
   /\/jest(?:-cli)?\/bin\/|jest-worker\/build\/workers|\/vitest\/|playwright\/(?:cli\.js|lib\/common\/process)|\/typescript\/(?:bin|lib)\/tsc\b|\/compiler-cli\/bundles\/src\/bin\/ngc|nx\/dist\/bin\/run-executor\.js/
 const SERVE = /\bnx(?:\.js)?\s+serve\b|:serve(?::\S+)?(?:\s|$)/
 
-/** Each scope in claude-cmd.slice with its processes' args, from `ps -eo cgroup=,args=`. */
+/** Each scope or service in claude.slice, claude-cmd.slice included, with its processes' args, from `ps -eo cgroup=,args=`. */
 function scopesOf(ps: string): string[][] {
   const scopes = new Map<string, string[]>()
   for (const row of ps.split('\n')) {
-    const match = /\/claude-cmd\.slice\/(run-[^\s/]+\.scope)\S*\s+(.*)$/.exec(row)
+    const match = /\/claude\.slice\/(?:claude-cmd\.slice\/)?([^\s/]+\.(?:scope|service))\S*\s+(.*)$/.exec(row)
     if (match) {
       scopes.set(match[1], [...(scopes.get(match[1]) ?? []), match[2]])
     }
@@ -238,12 +255,12 @@ function scopesOf(ps: string): string[][] {
   return [...scopes.values()]
 }
 
-/** Heavy commands running in claude-cmd.slice, one per scope. */
+/** Heavy commands running in claude.slice, one per scope; a dev server is not one of them. */
 export function heavyScopes(ps: string): number {
   return scopesOf(ps).filter(args => !args.some(arg => SERVE.test(arg)) && args.some(arg => HEAVY_PROCESS.test(arg))).length
 }
 
-/** Dev servers running in claude-cmd.slice, one per scope. */
+/** Dev servers running in claude.slice, one per scope or service. */
 export function serveScopes(ps: string): number {
   return scopesOf(ps).filter(args => args.some(arg => SERVE.test(arg))).length
 }
@@ -264,12 +281,13 @@ export function serveRefusal(running: number): string | null {
 export function concurrencyRefusal(running: number): string | null {
   return running < MAX_HEAVY_AT_ONCE
     ? null
-    : `${running} heavy commands are already running (at most ${MAX_HEAVY_AT_ONCE} at once). Wait for one to finish.`
+    : `${running} heavy commands are already running, dev servers included (at most ${MAX_HEAVY_AT_ONCE} at once). Wait for one to finish or stop a dev server.`
 }
 
-/** A dev server start counts against the dev servers in `ps`, anything else against the heavy commands. */
+/** A dev server counts as a heavy command, and a dev server start also against the dev servers. */
 export function runningRefusal(calls: readonly Invocation[], ps: string): string | null {
-  return isServe(calls) ? serveRefusal(serveScopes(ps)) : concurrencyRefusal(heavyScopes(ps))
+  const serves = serveScopes(ps)
+  return (isServe(calls) ? serveRefusal(serves) : null) ?? concurrencyRefusal(heavyScopes(ps) + serves)
 }
 
 const RUNNER_WRITES: ReadonlyArray<readonly [RegExp, string]> = [

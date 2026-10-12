@@ -1,29 +1,47 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { checkRunnerRefusal, crowdedRefusal, invocations, isHeavy, isServe, parsePressure, refusal, runningRefusal, scoped } from './rules'
+import { checkRunnerRefusal, crowdedRefusal, escapeRefusal, invocations, isHeavy, isServe, parsePressure, refusal, runningRefusal, scoped } from './rules'
 import type { Invocation, Pressure, ScriptsByDir } from './rules'
 
-let cmdSlice = ''
+const sliceDirs = new Map<string, string>()
 let home = ''
 
-// Stays empty while claude-cmd.slice is inactive, so it is looked up again on the next call.
-async function resolveCmdSlice($: EngineInterface): Promise<string> {
-  if (cmdSlice === '') {
-    const group = await $.process.run(['systemctl', '--user', 'show', 'claude-cmd.slice', '-p', 'ControlGroup', '--value']).catch(() => null)
+const CMD_SLICE = 'claude-cmd.slice'
+const SESSIONS_SLICE = 'claude.slice'
+
+// Not cached while the slice is inactive, so it is looked up again on the next call.
+async function resolveSlice($: EngineInterface, name: string): Promise<string> {
+  if (!sliceDirs.has(name)) {
+    const group = await $.process.run(['systemctl', '--user', 'show', name, '-p', 'ControlGroup', '--value']).catch(() => null)
     const path = group?.exitCode === 0 ? group.stdout.trim() : ''
-    cmdSlice = path === '' ? '' : `/sys/fs/cgroup${path}`
+    if (path !== '') {
+      sliceDirs.set(name, `/sys/fs/cgroup${path}`)
+    }
   }
-  return cmdSlice
+  return sliceDirs.get(name) ?? ''
 }
 
-async function readPressure($: EngineInterface): Promise<Pressure | null> {
-  const slice = await resolveCmdSlice($)
+// The sessions' slice is measured against MemoryHigh, where throttling starts; the command slice against its MemoryMax.
+async function readPressure($: EngineInterface, name: string): Promise<Pressure | null> {
+  const slice = await resolveSlice($, name)
   if (slice === '') {
     return null
   }
   const read = (file: string) => $.fs.read(`${slice}/${file}`)
-  const [current, max, pressure] = await Promise.all([read('memory.current'), read('memory.max'), read('memory.pressure')]).catch(() => ['', '', ''])
+  const limitFile = name === SESSIONS_SLICE ? 'memory.high' : 'memory.max'
+  const [current, max, pressure] = await Promise.all([read('memory.current'), read(limitFile), read('memory.pressure')]).catch(() => ['', '', ''])
   return parsePressure(current ?? '', max ?? '', pressure ?? '')
+}
+
+async function crowdedSlice($: EngineInterface): Promise<string | null> {
+  for (const name of [CMD_SLICE, SESSIONS_SLICE]) {
+    const pressure = await readPressure($, name)
+    const crowded = pressure === null ? null : crowdedRefusal(pressure, name)
+    if (crowded !== null) {
+      return crowded
+    }
+  }
+  return null
 }
 
 async function scriptsIn($: EngineInterface, dir: string): Promise<Record<string, string>> {
@@ -43,7 +61,7 @@ async function scriptsOf($: EngineInterface, calls: readonly Invocation[]): Prom
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await resolveCmdSlice($)
+    await resolveSlice($, CMD_SLICE)
     home = (await $.env.get('HOME')) ?? ''
     return next(e)
   })
@@ -59,13 +77,12 @@ export const register: Register = on => {
       }
     }
     const calls = invocations(e.command, { cwd: await $.session.cwd(), home })
-    const refused = refusal(calls, await scriptsOf($, calls))
+    const refused = escapeRefusal(e.command) ?? refusal(calls, await scriptsOf($, calls))
     if (refused !== null) {
       return { deny: `mem-guard: ${refused}` }
     }
     if (isHeavy(calls) || isServe(calls)) {
-      const pressure = await readPressure($)
-      const crowded = pressure === null ? null : crowdedRefusal(pressure)
+      const crowded = await crowdedSlice($)
       if (crowded !== null) {
         return { deny: `mem-guard: ${crowded}` }
       }

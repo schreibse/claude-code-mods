@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, heavyScopes, invocations, isHeavy, isServe, parsePressure, refusal, runningRefusal, scoped, segments, serveRefusal, serveScopes } from './rules'
+import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, escapeRefusal, heavyScopes, invocations, isHeavy, isServe, parsePressure, refusal, runningRefusal, scoped, segments, serveRefusal, serveScopes } from './rules'
 
 const GIB = 1024 ** 3
 const shell = { cwd: '/repo', home: '/home/u' }
@@ -91,11 +91,11 @@ test('segments split on operators and substitutions, never inside quotes', () =>
   expect(refused('git commit -m "Steps: 1) pkill -f nx, 2) npx jest"')).toBeNull()
 })
 
-test('heavy: builds, tests, typechecks, compose up; not nx show, a cat or a :lite script', () => {
-  for (const command of ['npx nx build api', 'pnpm run typecheck', 'npx tsc -p .', 'docker compose -f x.yml up -d', 'npx playwright test']) {
+test('heavy: builds, tests, typechecks, compose up, :lite sweeps too; not nx show or a cat', () => {
+  for (const command of ['npx nx build api', 'pnpm run typecheck', 'npx tsc -p .', 'docker compose -f x.yml up -d', 'npx playwright test', 'pnpm run typecheck:lite', 'pnpm run test:affected:lite']) {
     expect(heavy(command)).toBe(true)
   }
-  for (const command of ['npx nx show projects --affected', 'cat tsconfig.json', 'docker compose ps', 'git status', 'pnpm run typecheck:lite', 'pnpm run lint:affected:lite']) {
+  for (const command of ['npx nx show projects --affected', 'cat tsconfig.json', 'docker compose ps', 'git status']) {
     expect(heavy(command)).toBe(false)
   }
 })
@@ -104,6 +104,20 @@ test('a full or pressured command slice refuses, with the numbers', () => {
   expect(crowdedRefusal({ usedBytes: 4 * GIB, maxBytes: 8 * GIB, psiAvg10: 0 })).toBeNull()
   expect(crowdedRefusal({ usedBytes: 6.5 * GIB, maxBytes: 8 * GIB, psiAvg10: 0 })).toContain('6.5/8G')
   expect(crowdedRefusal({ usedBytes: 2 * GIB, maxBytes: 8 * GIB, psiAvg10: 35 })).toContain('pressure 35%')
+})
+
+test('the sessions slice refuses near its MemoryHigh, later than the command slice', () => {
+  expect(crowdedRefusal({ usedBytes: 9 * GIB, maxBytes: 11.5 * GIB, psiAvg10: 0 }, 'claude.slice')).toBeNull()
+  expect(crowdedRefusal({ usedBytes: 11.4 * GIB, maxBytes: 11.5 * GIB, psiAvg10: 0 }, 'claude.slice')).toContain('claude.slice is at 11.4/11.5G')
+})
+
+test('a Node tool started by systemd-run outside the claude slices is refused', () => {
+  expect(escapeRefusal('systemd-run --user --unit=admin-serve npx nx serve ec-admin')).toContain('--slice=claude.slice')
+  expect(escapeRefusal("cd /repo && systemd-run --user --scope -p MemoryMax=12G bash -c 'pnpm run build'")).toContain('outside the memory budget')
+  expect(escapeRefusal('systemd-run --user --unit=admin-serve --slice=claude.slice npx nx serve ec-admin')).toBeNull()
+  expect(escapeRefusal("systemd-run --user --scope -q --slice=claude-cmd.slice -- bash -c 'npx nx build api'")).toBeNull()
+  expect(escapeRefusal('systemd-run --user --scope -q sleep 5')).toBeNull()
+  expect(escapeRefusal('git commit -m "systemd-run npx"')).toBeNull()
 })
 
 test('node commands are scoped once, leading cds stay outside, everything else is left alone', () => {
@@ -143,6 +157,7 @@ test('heavy scopes: test runners, builds and nx tasks count once per scope; the 
     ['run-p4.scope', '/usr/bin/node-24 /repo/node_modules/playwright/lib/common/process.js'],
   ]))).toBe(2)
   expect(heavyScopes('0::/user.slice/user-1000.slice/user@1000.service/app.slice/ec-admin-serve.service   node nx/dist/bin/run-executor.js')).toBe(0)
+  expect(heavyScopes('0::/user.slice/user-1000.slice/user@1000.service/claude.slice/run-p9.scope   /usr/bin/node-24 /repo/node_modules/jest/bin/jest.js -i')).toBe(1)
   expect(heavyScopes('')).toBe(0)
 })
 
@@ -153,6 +168,7 @@ test('dev servers are counted per scope, apart from heavy commands', () => {
     ['run-p2.scope', 'bash -c cd /repo && pnpm nx serve members > /tmp/x/members.log 2>&1'],
     ['run-p3.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'],
   ]))).toBe(2)
+  expect(serveScopes('0::/user.slice/user-1000.slice/user@1000.service/claude.slice/ec-admin-serve.service   npm exec nx serve ec-admin')).toBe(1)
   expect(serveScopes('')).toBe(0)
 })
 
@@ -168,8 +184,12 @@ test('a third dev server is refused; serving is recognised however it is spelled
     ['run-p1.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'],
     ['run-p2.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'],
   ])
-  expect(runningRefusal(invocations('pnpm nx serve api', shell), twoJests)).toBeNull()
+  expect(runningRefusal(invocations('pnpm nx serve api', shell), twoJests)).toContain('2 heavy commands')
   expect(runningRefusal(invocations('npx nx build api', shell), twoJests)).toContain('2 heavy commands')
+  const serveAndJest = `${ps([['run-p1.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand']])}
+0::/user.slice/user-1000.slice/user@1000.service/claude.slice/ec-admin-serve.service   npm exec nx serve ec-admin`
+  expect(runningRefusal(invocations('npx nx run ui:test --runInBand', shell), serveAndJest)).toContain('dev servers included')
+  expect(runningRefusal(invocations('npx nx run ui:test --runInBand', shell), ps([['run-p1.scope', 'node /repo/node_modules/jest/bin/jest.js -i']]))).toBeNull()
 })
 
 test('a third heavy command waits, with the count', () => {

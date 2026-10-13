@@ -300,6 +300,11 @@ export function concurrencyRefusal(running: number): string | null {
     : `${running} heavy commands are already running, dev servers included (at most ${MAX_HEAVY_AT_ONCE} at once). Wait for one to finish or stop a dev server.`
 }
 
+/** A refused dev server can still run in the user's own terminal, outside the shared budget, if they agree. */
+export function withServeElsewhere(calls: readonly Invocation[], refused: string): string {
+  return isServe(calls) ? `${refused} Or ask the user to serve the app in their own terminal (app.slice, outside this budget).` : refused
+}
+
 /** A dev server counts as a heavy command, and a dev server start also against the dev servers. */
 export function runningRefusal(calls: readonly Invocation[], ps: string): string | null {
   const serves = serveScopes(ps)

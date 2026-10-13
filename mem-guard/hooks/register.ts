@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { checkRunnerRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, invocations, isHeavy, isServe, nodeScripts, parsePressure, refusal, runningRefusal, scoped } from './rules'
+import { checkRunnerRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, invocations, isHeavy, isServe, nodeScripts, parsePressure, refusal, runningRefusal, scoped, withServeElsewhere } from './rules'
 import type { Invocation, Pressure, ScriptsByDir } from './rules'
 
 const sliceDirs = new Map<string, string>()
@@ -89,12 +89,12 @@ export const register: Register = on => {
     if (isHeavy(calls) || isServe(calls) || (await runsPlaywrightScript($, calls))) {
       const crowded = await crowdedSlice($)
       if (crowded !== null) {
-        return { deny: `mem-guard: ${crowded}` }
+        return { deny: `mem-guard: ${withServeElsewhere(calls, crowded)}` }
       }
       const ps = await $.process.run(['ps', '-eo', 'cgroup:250=,args=', '--cols', '600']).catch(() => null)
       const busyRefusal = ps?.exitCode === 0 ? runningRefusal(calls, ps.stdout) : null
       if (busyRefusal !== null) {
-        return { deny: `mem-guard: ${busyRefusal}` }
+        return { deny: `mem-guard: ${withServeElsewhere(calls, busyRefusal)}` }
       }
     }
     return next({ ...e, command: scoped(e.command) })

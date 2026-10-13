@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, heavyScopes, invocations, isHeavy, isServe, nodeScripts, parsePressure, refusal, runningRefusal, scoped, segments, serveRefusal, serveScopes } from './rules'
+import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, heavyScopes, invocations, isHeavy, isServe, nodeScripts, parsePressure, refusal, runningRefusal, scoped, segments, serveRefusal, serveScopes, withServeElsewhere } from './rules'
 
 const GIB = 1024 ** 3
 const shell = { cwd: '/repo', home: '/home/u' }
@@ -214,6 +214,12 @@ test('a third dev server is refused; serving is recognised however it is spelled
 0::/user.slice/user-1000.slice/user@1000.service/claude.slice/ec-admin-serve.service   npm exec nx serve ec-admin`
   expect(runningRefusal(invocations('npx nx run ui:test --runInBand', shell), serveAndJest)).toContain('dev servers included')
   expect(runningRefusal(invocations('npx nx run ui:test --runInBand', shell), ps([['run-p1.scope', 'node /repo/node_modules/jest/bin/jest.js -i']]))).toBeNull()
+})
+
+test('a refused dev server start points at the user\'s own terminal; any other refusal does not', () => {
+  expect(withServeElsewhere(invocations('npx nx serve ec-admin', shell), 'full.')).toBe('full. Or ask the user to serve the app in their own terminal (app.slice, outside this budget).')
+  expect(withServeElsewhere(invocations('pnpm run serve:admin', shell), 'full.')).toContain('own terminal')
+  expect(withServeElsewhere(invocations('npx nx run ec-admin:test --maxWorkers=2', shell), 'full.')).toBe('full.')
 })
 
 test('a third heavy command waits, with the count', () => {

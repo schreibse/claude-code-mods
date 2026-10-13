@@ -1,5 +1,9 @@
 # mem-guard changelog
 
+## 0.3.2 — 2026-10-12
+
+- A refused dev server start also suggests asking the user to serve the app in their own terminal, outside the shared budget.
+
 ## 0.3.1 — 2026-10-12
 
 - A browser Playwright launched counts as a heavy command, so a `node` script driving Playwright is seen while it runs.

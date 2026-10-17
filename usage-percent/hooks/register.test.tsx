@@ -53,7 +53,7 @@ test('draws the usage in its own row under the hint line', async ($, on) => {
   const column = await ui.find({ type: 'Box' })
   expect(column?.props.flexDirection).toBe('column')
   expect(column?.text).toBe('? for shortcutsctx ▰▱▱▱ 34% | wk ▰▰▰▱ 86%')
-  expect((await ui.find({ type: 'Text', text: /86%$/ }))?.props.color).toBe('yellow')
+  expect((await ui.find({ type: 'Text', text: /^▰▰▰▱ 86%$/ }))?.props.color).toBe('yellow')
 })
 
 test('a push counts with -C or -c options before it', () => {

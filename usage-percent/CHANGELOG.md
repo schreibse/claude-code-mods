@@ -1,5 +1,11 @@
 # usage-percent changelog
 
+## 0.3.0 — 2026-10-17
+
+- The row under the prompt draws each figure as a four-cell bar with the percent, and the 5h and
+  weekly windows carry the rounded time to their reset: `ctx ▰▱▱▱ 34% | 5h ▰▰▱▱ 41% ⟳3h | wk ▰▰▰▱ 86% ⟳2d`.
+  The bar design comes from tamagoxtix's band.
+
 ## 0.2.0 — 2026-10-08
 
 - A GitHub run waiting for approval shows `⏸`; a cancelled GitLab pipeline shows `✗` like GitHub.

@@ -19,18 +19,36 @@ const nxLine = atom({ plugin: 'usage-percent', key: 'nx' } as const, null)
 
 type Poll = { root: string; uid: string; head: string; pipelineAt: number; pushedAt: number; pipe: Pipeline | null; composeDirs: Map<string, string>; isBusy: boolean }
 
-function figure(label: string, percent: number): Piece[] {
-  return [dim(`${label} `), { text: `${Math.round(percent)}%`, tone: toneOf(percent) }]
+const BAR_CELLS = 4
+
+function bar(percent: number): string {
+  const filled = Math.round((Math.max(0, Math.min(100, percent)) / 100) * BAR_CELLS)
+  return '▰'.repeat(filled) + '▱'.repeat(BAR_CELLS - filled)
+}
+
+// Time until a window resets, rounded to its largest unit: 2d, 3h, 45m.
+export function resetIn(iso: string | undefined, now: number): string {
+  const ms = iso ? Date.parse(iso) - now : NaN
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return ''
+  }
+  const hours = Math.floor(ms / 3_600_000)
+  return hours >= 24 ? `${Math.floor(hours / 24)}d` : hours >= 1 ? `${hours}h` : `${Math.max(1, Math.floor(ms / 60_000))}m`
+}
+
+function figure(label: string, percent: number, reset = ''): Piece[] {
+  const pieces = [dim(`${label} `), { text: `${bar(percent)} ${Math.round(percent)}%`, tone: toneOf(percent) }]
+  return reset === '' ? pieces : [...pieces, dim(` ⟳${reset}`)]
 }
 
 export function isGitPush(command: string): boolean {
   return /\bgit(?:\s+-[Cc]\s+\S+)*\s+push\b/.test(command)
 }
 
-export function line(context: SessionContextUsage, rateLimits: readonly SessionRateLimit[]): Piece[] {
+export function line(context: SessionContextUsage, rateLimits: readonly SessionRateLimit[], now = Date.now()): Piece[] {
   const limits = rateLimits.flatMap(limit => {
     const label = WINDOWS[limit.kind]
-    return label === undefined ? [] : [figure(label, limit.percentUsed)]
+    return label === undefined ? [] : [figure(label, limit.percentUsed, resetIn(limit.resetsAt, now))]
   })
   return joined([figure('ctx', context.percent ?? 0), ...limits], ' | ')
 }
@@ -134,7 +152,8 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     const { context, rateLimits } = await $.session.usage()
-    await update($, usageLine, () => line(context, rateLimits))
+    const measuredAt = await $.clock.now()
+    await update($, usageLine, () => line(context, rateLimits, measuredAt))
 
     timer?.cancel()
     timer = null
@@ -151,7 +170,8 @@ export const register: Register = on => {
   })
 
   on('session.measure', async ($, e, next) => {
-    await update($, usageLine, () => line(e.context, e.rateLimits))
+    const now = await $.clock.now()
+    await update($, usageLine, () => line(e.context, e.rateLimits, now))
     return next(e)
   })
 

@@ -19,13 +19,14 @@ the prompt and react to tool calls. Built and used on Claude Code 2.1.287+, Linu
 | [herdr-notify](herdr-notify/) | GNOME popup when Claude waits for a permission, an answer or a new prompt (a `Notification` hook, not a plugin). Skipped while that pane is the focused one in herdr. Clicking it raises Ghostty and focuses that session's herdr pane. Hook: `"Notification": [{"matcher": "permission_prompt\|idle_prompt\|elicitation_dialog", "hooks": [{"type": "command", "command": "bash \"$HOME/.claude/skills/herdr-notify/notify.sh\""}]}]` | – | herdr, Ghostty, `notify-send`, `jq` |
 | [stack-down](stack-down/) | On `/clear` and exit (also logout, a finished `-p` run, SIGINT/SIGTERM/SIGHUP), stops what the session left running in its repo: the `nx` processes it started (with their workers), and the repo's Docker Compose projects (`compose down`, volumes kept) unless another Claude session works in the same repo. Only for a session at a repo's top level (`git rev-parse --show-toplevel`); one started above the repos, such as `~/Dev`, stops nothing | – | `docker compose`, `git` |
 | [review-walk](review-walk/) | Skill plus mod: `/review-walk` takes the findings of the reviews already run in the conversation (`/code-review`, a repo's own review skill, CodeRabbit threads, MR comments), merges and ranks them, and asks fix / issue / skip one finding at a time; fixes wait until every finding is decided. The mod puts `Finding N/M`, a progress bar and the decisions so far over each question, and a band above the prompt between them. Decisions you authorised up front ("apply every Fix") are recorded through its `ReviewWalkDecide` tool instead of a question. The walk starts only after the skill runs, so a review on its own draws no band | `/review-walk` | **A review run first**: it walks findings, it never reviews. Any review skill or source works |
+| [tamagoxtix](tamagoxtix/) | A fork of [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix) (MIT): a pixel monster in place of the spinner that acts out what Claude does, a band above the prompt between turns with the 5 h and weekly limits, tokens per day and the repo's forge numbers, cheer scenes while you type, twelve palettes, an optional powerline status line. The fork's band stacks the other mods' bands under the monster instead of replacing them. With quiet-spinner the monster's line shows the plain word when quiet-spinner sits outer in the chain, else the whimsical one. The herdr half is [herdr-tamagoxtix](herdr-tamagoxtix/) (sidebar faces, a usage popup, a tab-bar status area) | `/tamagoxtix help`, `… pet on\|off` hides the band, `… palette <name>`, `… statusline on\|off` (writes `statusLine` into `settings.json`, backup kept), `… theme on\|off`, `… reroll` | Node.js 18+, a Nerd Font (or `/tamagoxtix icons plain`); `git`, `gh`/`glab` optional |
 
 The model sees exactly what it would without them: the mods change what is drawn, except
 reminder-log, which drops two kinds of injected reminders, redact, which hides secrets, mem-guard,
 which runs Node commands inside a systemd scope and refuses some with a `mem-guard: …` error, and
 stack-down, which stops the session's own servers and, when no other session is in the repo, its Compose stacks when the session ends.
 
-Three mods call out on their own:
+Four mods call out on their own:
 
 - **mr-banner**, when a GitLab MCP note or approval answers without the MR's link, calls
   `get_merge_request` on the `gitlab` MCP server for the link and title. `gh`/`glab` commands
@@ -34,6 +35,10 @@ Three mods call out on their own:
   and a fetch (`glab mr view` plus all pages of the MR's discussions) runs every minute for
   15 min after a `git push`, every 5 min while the band shows something, every 15 min otherwise,
   and once 5 s after a thread is resolved.
+- **tamagoxtix** runs `node` on its usage script and `git` at session start and after each turn,
+  `gh`/`glab` at most every ten minutes for the repo numbers, and only without a signed-in
+  `gh`/`glab` the forge's public API (the remote's owner, repo and branch go out, nothing else).
+  The mod's own [README](tamagoxtix/README.md) lists every call.
 - **usage-percent**, in Nx repos, polls every 10 s: `ps` and `pwdx` for `nx serve` processes, and
   `docker inspect` once per container a server runs in, to read its compose project directory.
   The pipeline (`gh run list` / `glab ci get`) is fetched when HEAD moves, 15 s after a `git push`,
@@ -221,6 +226,22 @@ if [ -n "$HERDR_ENV" ]; then
 fi
 ```
 
+The `herdr` client forks its server into the client's own cgroup, so a server started inside a
+Ghostty window dies with that window and takes every pane with it. A wrapper in `~/.bashrc.d`
+starts the first server in its own scope under `app.slice` instead; every other call, `herdr plugin
+…` included, goes straight through:
+
+```sh
+# ~/.bashrc.d/herdr-scope.sh
+herdr() {
+    if [ $# -eq 0 ] && [ -z "$HERDR_ENV" ] && ! command herdr status server 2>/dev/null | grep -q '^status: running'; then
+        systemd-run --user --scope -q --slice=app.slice --unit="herdr-$(date +%s)" "$HOME/.local/bin/herdr"
+    else
+        command herdr "$@"
+    fi
+}
+```
+
 Also turn on herdr's kitty graphics passthrough (off by default) in `~/.config/herdr/config.toml`:
 
 ```toml
@@ -244,6 +265,18 @@ Install:
 herdr plugin link ~/.claude/skills/herdr-link-toast
 ```
 
+### herdr-tamagoxtix (a herdr plugin, not a Claude Code mod)
+
+The herdr half of tamagoxtix, unchanged from upstream: the monster's face in the sidebar, a
+usage popup (`herdr plugin action invoke tamagoxtix.stats`) and, on request, a status area right of
+the tabs and herdr colors from the palette (`tamagoxtix.theme-install`; `theme-uninstall` restores
+herdr's own look). It edits `~/.config/herdr/config.toml` only for those actions. Needs herdr
+0.9.0+ and Node.js 18+. Install:
+
+```sh
+herdr plugin link ~/.claude/skills/herdr-tamagoxtix
+```
+
 Without herdr, in plain kitty or Ghostty, none of this is needed. Terminals without the kitty
 graphics protocol show the thumbnail's alt text (its path).
 
@@ -262,7 +295,7 @@ say so to the person instead of promising it works.
 
 | Works anywhere | Needs Linux | Never on macOS or Windows |
 |---|---|---|
-| quiet-spinner, reminder-log, mr-banner, coderabbit-band, redact (with `betterleaks`), handover, review-walk; usage-percent's `ctx/5h/wk` and pipeline parts | usage-percent's memory and dev-server parts (cgroup v2, `/proc`, `pwdx`; they stay empty elsewhere); **stack-down** (`ps`, `/proc/<pid>/cwd`, `setsid`) | **mem-guard**: it wraps every Node command in `systemd-run`, so without systemd every `node`/`pnpm`/`nx` call fails. Leave it out. herdr-notify, herdr-link-toast: Linux, herdr, Ghostty, GNOME |
+| quiet-spinner, reminder-log, mr-banner, coderabbit-band, redact (with `betterleaks`), handover, review-walk, tamagoxtix (Node.js 18+, a Nerd Font); usage-percent's `ctx/5h/wk` and pipeline parts | usage-percent's memory and dev-server parts (cgroup v2, `/proc`, `pwdx`; they stay empty elsewhere); **stack-down** (`ps`, `/proc/<pid>/cwd`, `setsid`) | **mem-guard**: it wraps every Node command in `systemd-run`, so without systemd every `node`/`pnpm`/`nx` call fails. Leave it out. herdr-notify, herdr-link-toast: Linux, herdr, Ghostty, GNOME |
 
 - **Windows:** quiet-bash, redact and handover read POSIX paths (`/`, `~`). There, quiet-bash
   thumbnails and redact's Bash pre-scan find nothing, and handover leaves spent files behind.
@@ -299,6 +332,7 @@ dev-server rules only work with the real project names: read them from the repo
 | mr-banner, coderabbit-band, quiet-bash | the GitLab MCP server named `gitlab` (`mcp__gitlab__…`) | `hooks/*.ts(x)` |
 | coderabbit-band, usage-percent | any remote that isn't GitHub (or Azure) is taken for GitLab | `hooks/register.tsx` |
 | herdr-notify | Ghostty's desktop entry `com.mitchellh.ghostty` | `notify.sh` |
+| tamagoxtix | none: upstream's code, plus the band chaining | – |
 
 **5. Install and check.** Install as above (from a clone when you adapted a mod: an update replaces a marketplace copy), then run `claude plugin validate <mod>` and
 `claude plugin test <mod>` for each mod you install. Start a new session and check what the person
@@ -316,6 +350,16 @@ tsc -p <mod>                   # once the engine has laid .claude-plugin/types/
 ```
 
 Edits in `~/.claude/skills` hot-reload into running sessions that loaded the mod.
+
+**tamagoxtix follows upstream by patch.** `tamagoxtix/` is upstream's `claude/` and
+`herdr-tamagoxtix/` its `herdr/`, forked at the commit the mod's CHANGELOG names. To take a newer
+upstream, apply its diff over the fork and resolve what the fork changed (the band hook in
+`register.tsx`), then bump the version past upstream's:
+
+```sh
+git -C /path/to/upstream diff <forked-at>..<new> -- claude | git -C ~/.claude/skills apply -p2 --directory=tamagoxtix --3way
+git -C /path/to/upstream diff <forked-at>..<new> -- herdr  | git -C ~/.claude/skills apply -p2 --directory=herdr-tamagoxtix --3way
+```
 
 ### Releasing a mod
 

@@ -1,0 +1,102 @@
+id = "tamagoxtix"
+name = "TamaGoxtix"
+version = "2.1.4"
+min_herdr_version = "0.9.0"
+description = "Little pixel monsters for your agents: animated sidebar faces, token usage charts and Omarchy-style palettes."
+platforms = ["linux", "macos", "windows"]
+
+[[startup]]
+command = ["node", "src/hook.mjs"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["node", "src/hook.mjs"]
+
+[[events]]
+on = "pane.agent_detected"
+command = ["node", "src/hook.mjs"]
+
+[[events]]
+on = "pane.closed"
+command = ["node", "src/hook.mjs"]
+
+[[actions]]
+id = "stats"
+title = "TamaGoxtix: token usage"
+command = ["node", "src/actions.mjs", "stats"]
+
+[[actions]]
+id = "theme-install"
+title = "TamaGoxtix: herdr look (palette colors, status bar, sidebar colors)"
+command = ["node", "src/theme.mjs", "install"]
+
+[[actions]]
+id = "theme-uninstall"
+title = "TamaGoxtix: restore herdr's own look"
+command = ["node", "src/theme.mjs", "uninstall"]
+
+[[actions]]
+id = "theme-follow-herdr"
+title = "TamaGoxtix: herdr look takes its colors from herdr's theme"
+command = ["node", "src/theme.mjs", "follow-herdr"]
+
+[[actions]]
+id = "theme-follow-palette"
+title = "TamaGoxtix: herdr look takes its colors from the tamagoxtix palette"
+command = ["node", "src/theme.mjs", "follow-palette"]
+
+[[actions]]
+id = "palette-refresh"
+title = "TamaGoxtix: apply the current palette again (after an Omarchy theme change)"
+command = ["node", "src/actions.mjs", "palette-refresh"]
+
+[[actions]]
+id = "theme-refresh"
+title = "TamaGoxtix: recolor the herdr look"
+command = ["node", "src/theme.mjs", "refresh"]
+
+[[actions]]
+id = "sidebar-install"
+title = "TamaGoxtix: put monsters in the sidebar"
+command = ["node", "src/sidebar.mjs", "install"]
+
+[[actions]]
+id = "sidebar-uninstall"
+title = "TamaGoxtix: restore herdr's sidebar"
+command = ["node", "src/sidebar.mjs", "uninstall"]
+
+[[actions]]
+id = "sidebar-refresh"
+title = "TamaGoxtix: recolor the sidebar"
+command = ["node", "src/sidebar.mjs", "refresh"]
+
+[[actions]]
+id = "palette-next"
+title = "TamaGoxtix: next palette"
+command = ["node", "src/actions.mjs", "palette-next"]
+
+[[actions]]
+id = "icon"
+title = "TamaGoxtix: choose this agent's icon"
+command = ["node", "src/actions.mjs", "icon"]
+
+[[actions]]
+id = "reroll"
+title = "TamaGoxtix: new monster for this agent"
+command = ["node", "src/actions.mjs", "reroll"]
+
+[[panes]]
+id = "stats"
+title = "TamaGoxtix"
+placement = "popup"
+width = "80%"
+height = 34
+command = ["node", "src/stats.mjs"]
+
+[[panes]]
+id = "icon-picker"
+title = "TamaGoxtix icons"
+placement = "popup"
+width = 44
+height = 20
+command = ["node", "src/picker.mjs"]

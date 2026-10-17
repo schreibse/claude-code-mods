@@ -1,6 +1,6 @@
 {
   "name": "schreibse-mods",
-  "description": "Claude Code mods: quieter transcript, usage row, MR cards, CodeRabbit band, secret redaction, memory guard, handover, stack teardown, review walk",
+  "description": "Claude Code mods: quieter transcript, usage row, MR cards, CodeRabbit band, secret redaction, memory guard, handover, stack teardown, review walk, pixel monster",
   "owner": {
     "name": "Stephan Schreiber"
   },
@@ -48,6 +48,10 @@
     {
       "name": "review-walk",
       "source": "./review-walk"
+    },
+    {
+      "name": "tamagoxtix",
+      "source": "./tamagoxtix"
     }
   ]
 }

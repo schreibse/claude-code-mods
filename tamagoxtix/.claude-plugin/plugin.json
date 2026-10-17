@@ -1,0 +1,24 @@
+{
+  "name": "tamagoxtix",
+  "displayName": "TamaGoxtix",
+  "version": "2.2.0",
+  "description": "A little pixel monster in place of the spinner: animated by what Claude is doing, with a visual timer, a stack of token coins, usage charts and Omarchy-style palettes.",
+  "author": {
+    "name": "Fabricio Oliveira de Andrade",
+    "url": "https://github.com/fabandrade88"
+  },
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/tamagoxtix",
+  "repository": "https://github.com/schreibse/claude-code-mods",
+  "license": "MIT",
+  "keywords": [
+    "spinner",
+    "statusline",
+    "usage",
+    "tokens",
+    "pixel-art",
+    "theme",
+    "omarchy",
+    "herdr"
+  ],
+  "types": "./types/index.d.ts"
+}

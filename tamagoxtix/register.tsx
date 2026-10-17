@@ -28,7 +28,7 @@ const noRepo = atom({ plugin: 'tamagoxtix', key: 'noRepo' } as const, null)
 // The agent session herdr recorded for this pane, once it has one.
 const herdrSeed = atom({ plugin: 'tamagoxtix', key: 'herdrSeed' } as const, null)
 
-type Config = { palette?: string; sidebar?: boolean; [key: string]: unknown }
+type Config = { palette?: string; sidebar?: boolean; animate?: boolean; [key: string]: unknown }
 
 // ---- the draft in the prompt box ----
 
@@ -464,9 +464,8 @@ async function probeAll($: EngineInterface): Promise<Probe[]> {
   return found
 }
 
-// What the band shows at a width: the scene and caption, then usage, then
-// the repo column (idle.tsx WIDTH).
-const BAND_WIDTH = { usage: 28 + 46 + 40, repo: 28 + 46 + 40 + 46 }
+// What the band shows at a width: the scene and caption, then the repo column (idle.tsx WIDTH).
+const BAND_WIDTH = { repo: 33 + 46 + 46 }
 
 async function doctorText($: EngineInterface, columns = 80): Promise<string> {
   const lines = ['TamaGoxtix doctor', '']
@@ -478,7 +477,7 @@ async function doctorText($: EngineInterface, columns = 80): Promise<string> {
     if (!found) lines.push(`    needed for ${check.why}${check.required ? '' : ' (optional)'}`, `    install: ${check.install}`)
   }
   const pet = await read($, showPet)
-  const fits = columns >= BAND_WIDTH.repo ? 'scene, usage and repo' : columns >= BAND_WIDTH.usage ? 'scene and usage (the repo column needs 160)' : 'scene only (usage needs 114 columns, the repo column 160)'
+  const fits = columns >= BAND_WIDTH.repo ? 'scene and repo' : `scene only (the repo column needs ${BAND_WIDTH.repo} columns)`
   lines.push(
     '',
     pet ? 'Monster band: on (/tamagoxtix pet off hides it)' : '✖ Monster band: hidden by /tamagoxtix pet off (pet on brings it back)',
@@ -513,21 +512,6 @@ function resetIn(now: number, iso?: string): string {
 }
 
 const LEVELS = ' ▁▂▃▄▅▆▇█'
-
-// Monday to Sunday of the current week, from the usage summary's days.
-function thisWeek(data: TamaUsage | null, now: number) {
-  const today = new Date(now)
-  today.setHours(0, 0, 0, 0)
-  const monday = new Date(today)
-  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7))
-  const byDate = new Map((data?.days ?? []).map(d => [d.date, d.tokens]))
-  return ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((label, i) => {
-    const day = new Date(monday)
-    day.setDate(monday.getDate() + i)
-    const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
-    return { label, tokens: byDate.get(key) ?? 0, isToday: day.getTime() === today.getTime(), isFuture: day > today }
-  })
-}
 
 function columnRows(values: number[], height: number): string[][] {
   const max = Math.max(1, ...values)
@@ -766,6 +750,7 @@ async function helpSections($: EngineInterface): Promise<HelpSection[]> {
       title: 'your monster',
       rows: [
         { command: '/tamagoxtix pet on|off', does: 'the monster above the prompt', state: pet },
+        { command: '/tamagoxtix animate on|off', does: 'animated scenes, or a still frame', state: config.animate !== false },
         { command: '/tamagoxtix reroll', does: 'a new monster' },
       ],
     },
@@ -825,7 +810,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'tamagoxtix',
       description: 'Token usage charts, palettes and your monster',
-      argumentHint: '[help | doctor | palette [name] | theme on|off | statusline on|off | icons nerd|plain | pet on|off | reroll]',
+      argumentHint: '[help | doctor | palette [name] | theme on|off | statusline on|off | icons nerd|plain | pet on|off | animate on|off | reroll]',
     })
     return started
   })
@@ -953,6 +938,7 @@ export const register: Register = on => {
       word: e.props.message ?? e.props.word,
       startedAt: current?.startedAt ?? now,
       tokens: current?.tokens ?? 0,
+      animate: (await readConfig($)).animate !== false,
     }
     const { Client } = $.ui.resolve(e)
     return <Client module="./spinner.tsx" key="tamagoxtix-spinner" props={spinnerProps} />
@@ -978,7 +964,6 @@ export const register: Register = on => {
     const show = await read($, showPet)
     const since = await read($, idleSince)
     const data = await read($, usage)
-    const windows = await read($, limits)
     const repo = await read($, github)
     if (!pal || !pet || !show) return next(e)
     const now = await $.clock.now()
@@ -991,8 +976,6 @@ export const register: Register = on => {
       palette: pal,
       idleSince: since || now,
       todayCount: data?.today.tokens ?? null,
-      limits: windows,
-      week: thisWeek(data, now),
       github: repo,
       columns: e.props.bodyColumns,
       nodeMissing: missingNode,
@@ -1000,6 +983,7 @@ export const register: Register = on => {
       compact: mode === 'compact',
       face,
       icons: String(config.icons ?? 'nerd'),
+      animate: config.animate !== false,
     }
     // the other mods' bands (handover, review-walk, …) stack under the monster, nearest the prompt
     const others = await next(e)
@@ -1261,6 +1245,12 @@ export const register: Register = on => {
       await $.store.set('showPet', visible)
       await update($, showPet, () => visible)
       return { text: visible ? 'Your monster hangs out above the prompt between turns.' : 'Idle monster hidden. /tamagoxtix pet on brings it back.' }
+    }
+
+    if (sub === 'animate') {
+      if (arg !== 'on' && arg !== 'off') return { text: 'Usage: /tamagoxtix animate on|off' }
+      await writeConfig($, { animate: arg === 'on' })
+      return { text: arg === 'on' ? 'Animated scenes.' : 'Still scenes: one frame per scene, no animation. /tamagoxtix animate on brings the motion back.' }
     }
 
     if (sub === 'icons') {

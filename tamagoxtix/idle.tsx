@@ -6,7 +6,7 @@ import type { ClientElements, ClientModule, ClientSurface } from 'claude-code'
 
 import { cheerSceneAt, gitlabFox, idleSceneAt, octocat, scene } from './lib/scenes.mjs'
 import { slotColor } from './lib/monsters.mjs'
-import type { TamaGithub, TamaLimit, TamaMonster, TamaPalette } from './types'
+import type { TamaGithub, TamaMonster, TamaPalette } from './types'
 
 type Run = { text: string; fg?: string; bg?: string }
 type SceneData = { rows: Run[][]; fx: string[]; fxSlot: string; caption: string }
@@ -33,10 +33,6 @@ export type IdleProps = {
   palette: TamaPalette
   idleSince: number
   todayCount: number | null
-  /** The 5-hour and weekly windows, as Claude Code last reported them. */
-  limits: TamaLimit[]
-  /** Monday to Sunday of this week: tokens per day, today marked. */
-  week: { label: string; tokens: number; isToday: boolean; isFuture: boolean }[]
   /** The project's GitHub repository, or null when it is not on GitHub. */
   github: TamaGithub | null
   /** The band's width: columns that do not fit are left out. */
@@ -51,6 +47,8 @@ export type IdleProps = {
   compact?: boolean
   /** The monster's icon, a glyph or a symbol (icons.mjs). */
   face?: string
+  /** false: one still frame per scene; the scene still changes every 40 seconds. */
+  animate?: boolean
 }
 
 // GitHub glyphs: octicons from a Nerd Font, or plain symbols without one.
@@ -60,11 +58,13 @@ const GLYPHS = {
 }
 
 // Widths of the band's parts, to decide what fits.
-const WIDTH = { scene: 28, caption: 46, usage: 40, github: 46 }
+const WIDTH = { scene: 33, caption: 46, github: 46 }
 
 type State = { frame: number }
 
 const FRAME_MS = 320
+const STILL_MS = 10_000 // enough for the idle minutes, the cheer and the scene change
+const STILL_FRAME = 7 // the frame where most scenes show their effect
 
 // The line under the caption while you type, a new one every 10 seconds.
 const CHEERS = [
@@ -90,29 +90,13 @@ function formatIdle(ms: number): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`
 }
 
-const BAR_CELLS = 8
-const LEVELS = ['·', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
-
-function bar(percent: number): string {
-  const filled = Math.round((Math.max(0, Math.min(100, percent)) / 100) * BAR_CELLS)
-  return '▰'.repeat(filled) + '▱'.repeat(BAR_CELLS - filled)
-}
-
-function resetIn(iso: string | undefined, now: number): string {
-  const ms = iso ? Date.parse(iso) - now : NaN
-  if (!Number.isFinite(ms) || ms <= 0) return ''
-  const hrs = Math.floor(ms / 3_600_000)
-  const mins = Math.floor((ms % 3_600_000) / 60_000)
-  if (hrs >= 24) return `${Math.floor(hrs / 24)}d ${hrs % 24}h`
-  return hrs ? `${hrs}h ${mins}m` : `${mins}m`
-}
-
 const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<State>) => {
   const { Box, Text } = surface.elements
+  const animate = props.animate !== false
   if (surface.state === undefined) {
-    surface.every(FRAME_MS, () => surface.setState({ frame: (surface.state?.frame ?? 0) + 1 }))
+    surface.every(animate ? FRAME_MS : STILL_MS, () => surface.setState({ frame: (surface.state?.frame ?? 0) + 1 }))
   }
-  const frame = surface.state?.frame ?? 0
+  const frame = animate ? surface.state?.frame ?? 0 : STILL_FRAME
   const { monster, palette } = props
   const now = Date.now()
   const data = scene(monster, props.cheering ? cheerSceneAt(monster, now) : idleSceneAt(monster, now), frame)
@@ -133,51 +117,10 @@ const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<Stat
     )
   }
 
-  // usage beside the monster: the two limit windows as bars like the
-  // spinner's, then this week's days as one column each
-  const limitRow = (label: string, kind: string) => {
-    const l = props.limits.find(w => w.kind === kind)
-    if (!l) {
-      return (
-        <Text mono>
-          <Text mono color={palette.fg}>{label.padEnd(6)}</Text>
-          <Text mono color={palette.muted}>{'▱'.repeat(BAR_CELLS)} no reading yet</Text>
-        </Text>
-      )
-    }
-    const color = l.percentUsed >= 90 ? palette.red : l.percentUsed >= 70 ? palette.orange : palette.cyan
-    const reset = resetIn(l.resetsAt, now)
-    return (
-      <Text mono>
-        <Text mono color={palette.fg}>{label.padEnd(6)}</Text>
-        <Text mono color={color}>{bar(l.percentUsed)}</Text>
-        <Text mono color={color} bold>{` ${String(Math.round(l.percentUsed)).padStart(3)}%`}</Text>
-        {reset ? <Text mono color={palette.muted}>{`  ⟳ ${reset}`}</Text> : null}
-      </Text>
-    )
-  }
-  const max = Math.max(1, ...props.week.map(d => d.tokens))
-  const weekRow = (
-    <Text mono>
-      <Text mono color={palette.fg}>{'days'.padEnd(6)}</Text>
-      {props.week.map(d => {
-        const level = d.isFuture ? ' ' : (LEVELS[d.tokens ? Math.max(1, Math.round((d.tokens / max) * 8)) : 0] ?? '·')
-        return (
-          <Text mono>
-            <Text mono color={d.isToday ? palette.accent : palette.muted} bold={d.isToday}>
-              {d.label}
-            </Text>
-            <Text mono color={d.isToday ? palette.accent : palette.yellow}>{level} </Text>
-          </Text>
-        )
-      })}
-    </Text>
-  )
   const separator = () => (
     <Box flexDirection="column">{['│', '│', '│'].map(line => <Text mono color={palette.muted}>{line}</Text>)}</Box>
   )
-  const showUsage = props.columns >= WIDTH.scene + WIDTH.caption + WIDTH.usage
-  const showGithub = props.github !== null && props.columns >= WIDTH.scene + WIDTH.caption + WIDTH.usage + WIDTH.github
+  const showGithub = props.github !== null && props.columns >= WIDTH.scene + WIDTH.caption + WIDTH.github
 
   // the repository: an octocat for GitHub or a fox for GitLab, then name and
   // stars, branch and its state,
@@ -228,7 +171,7 @@ const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<Stat
   )
 
   return (
-    <Box flexDirection="row" gap={3} marginTop={1}>
+    <Box flexDirection="row" gap={2} marginTop={1}>
       <Box flexDirection="column">{sceneRows(Text, monster, palette, data)}</Box>
       <Box flexDirection="column">
         <Text mono>
@@ -256,14 +199,6 @@ const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<Stat
         </Text>
         )}
       </Box>
-      {showUsage && separator()}
-      {showUsage && (
-        <Box flexDirection="column">
-          {limitRow('5h', 'five_hour')}
-          {limitRow('week', 'seven_day')}
-          {weekRow}
-        </Box>
-      )}
       {showGithub && separator()}
       {showGithub && githubColumn}
     </Box>

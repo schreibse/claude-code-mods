@@ -37,15 +37,19 @@ export type SpinnerProps = {
   word: string
   startedAt: number
   tokens: number
+  /** false: one still frame per scene; the clock and the bars still tick once a second. */
+  animate: boolean
 }
 
 type State = { frame: number }
 
 const FRAME_MS = 160
+const STILL_MS = 1000
+const STILL_FRAME = 7 // the frame where most scenes show their effect
 const BAR_CELLS = 8
 const TOKENS_PER_BAR = 10_000 // the token bar fills once per 10k tokens, then earns a $
 const MAX_MARKS = 10
-const GAP = 3 // columns between the monster and the text
+const GAP = 2 // columns between the monster and the text
 
 const MODE_LABEL: Record<string, string> = {
   requesting: 'is calling',
@@ -84,7 +88,7 @@ const CLOCK = ['◴', '◷', '◶', '◵']
 const Spinner: ClientModule<SpinnerProps, State> = (props, surface: ClientSurface<State>) => {
   const { Box, Text } = surface.elements
   if (surface.state === undefined) {
-    surface.every(FRAME_MS, () => surface.setState({ frame: (surface.state?.frame ?? 0) + 1 }))
+    surface.every(props.animate ? FRAME_MS : STILL_MS, () => surface.setState({ frame: (surface.state?.frame ?? 0) + 1 }))
   }
   const frame = surface.state?.frame ?? 0
   const { monster, palette, mode } = props
@@ -92,7 +96,7 @@ const Spinner: ClientModule<SpinnerProps, State> = (props, surface: ClientSurfac
 
   // the monster acts out the mode with its props: laptop, thought bubbles,
   // hammer, keyboard
-  const acting = scene(monster, workSceneAt(monster, mode, Date.now()), Math.floor(frame / 2))
+  const acting = scene(monster, workSceneAt(monster, mode, Date.now()), props.animate ? Math.floor(frame / 2) : STILL_FRAME)
   const sprite = sceneRows(Text, monster, palette, acting)
 
   // both bars fill in eight steps: one minute of time, 10k tokens

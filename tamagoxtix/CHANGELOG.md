@@ -8,5 +8,11 @@ Forked from [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix
 - The band above the prompt passes the render on to the other mods (`next(e)`) and stacks their
   bands under the monster, so handover, review-walk, coderabbit-band and task-meter keep showing.
   Upstream drew its band alone.
+- The band no longer shows the 5-hour and weekly bars and the week's days: the limits already sit
+  on the prompt hint (usage-percent). The repo column now needs 125 columns instead of 160.
+- The effects column beside the monster has a fixed width (11, the widest effect), so the text
+  beside the scene stays put instead of shifting when an effect wider than 6 plays.
+- `/tamagoxtix animate off`: still scenes (one frame each) in the spinner and the band; the scenes
+  still change and the clock and bars still tick. `animate on` is the default.
 - Installed from the schreibse-mods marketplace or the skills folder; the herdr plugin is the
   sibling folder `herdr-tamagoxtix`.

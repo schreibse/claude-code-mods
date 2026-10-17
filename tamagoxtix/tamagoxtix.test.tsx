@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 
+import { CHEER_SCENES, FX_WIDTH, IDLE_SCENES, WORK_SCENES, scene } from './lib/scenes.mjs'
+
 const START = { cwd: '/tmp', surface: 'terminal', isInteractive: true } as const
 const SPINNER = { word: 'Coalescing', message: null, suffix: '…', mode: 'thinking' } as const
 
@@ -453,4 +455,14 @@ describe('tamagoxtix', () => {
     })
     expect(result.text).toContain('Unknown palette')
   })
+
+  test('no effect is wider than the padded effects column, so the text beside the scene stays put', async () => {
+    const monster = { seed: 'test', name: 'Mo' } as never
+    for (const name of [...IDLE_SCENES, ...WORK_SCENES, ...CHEER_SCENES]) {
+      for (let frame = 0; frame < 120; frame++) {
+        for (const row of scene(monster, name, frame).fx) expect([...row].length).toBe(FX_WIDTH)
+      }
+    }
+  })
+
 })

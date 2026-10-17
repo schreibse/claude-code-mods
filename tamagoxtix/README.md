@@ -5,7 +5,7 @@ Fabricio Oliveira de Andrade), kept here with the other mods; see [CHANGELOG.md]
 what differs. The herdr plugin is in [herdr-tamagoxtix](../herdr-tamagoxtix/).
 
 A pixel monster in place of Claude Code's spinner: it acts out what Claude is
-doing, hangs out above the prompt between turns next to your usage and your
+doing, hangs out above the prompt between turns next to your
 GitHub or GitLab repo, cheers you on while you type a prompt, and colors everything in one palette.
 
 ```sh

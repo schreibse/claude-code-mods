@@ -15,6 +15,8 @@ import { ART_MORE, IDLE_MORE, IDLE_PARTY, POOLS_MORE, WORK_INDUSTRIAL, WORK_MEME
 
 export const SCENE_WIDTH = 20; // pixels, one text column each
 export const SCENE_HEIGHT = 6; // pixels, two per text row
+// The effects column is padded to the widest effect ("hole in one"), so the text beside the scene never shifts.
+export const FX_WIDTH = 11;
 
 // ---- props: rows of characters, each mapped to a palette slot ----
 
@@ -448,7 +450,7 @@ export function scene(monster, name, frame) {
   for (const [art, x, y, opts] of s.props ?? []) drawArt(grid, art, x, y, opts);
   return {
     rows: gridToCells(grid).map(cellsToRuns),
-    fx: (s.fx ?? BLANK).map((f) => f.padEnd(6)),
+    fx: (s.fx ?? BLANK).map((f) => f.padEnd(FX_WIDTH)),
     fxSlot: s.fxSlot ?? "fg",
     caption: s.caption ?? "",
   };

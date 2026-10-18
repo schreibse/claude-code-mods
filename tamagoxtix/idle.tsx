@@ -1,7 +1,8 @@
 // Surface module for the band above the prompt while Claude waits for you:
 // the monster naps, snacks, sips coffee, plays, reads or goes to the
 // bathroom, a new scene every 40 seconds; while you type a prompt it cheers
-// you on instead, a new cheer every 10 seconds.
+// you on instead, a new cheer every 10 seconds. The hook puts the bands of
+// the mods beneath (running tasks, a handover…) under the caption column.
 import type { ClientElements, ClientModule, ClientSurface } from 'claude-code'
 
 import { cheerSceneAt, gitlabFox, idleSceneAt, octocat, scene } from './lib/scenes.mjs'
@@ -58,7 +59,8 @@ const GLYPHS = {
 }
 
 // Widths of the band's parts, to decide what fits.
-const WIDTH = { scene: 33, caption: 46, github: 46 }
+// scene: 20 pixel columns, a space, the 11-wide effects column and the gap of 2
+const WIDTH = { scene: 34, caption: 46, github: 46 }
 
 type State = { frame: number }
 
@@ -180,24 +182,18 @@ const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<Stat
           </Text>
           <Text mono color={palette.fg}> {data.caption}</Text>
         </Text>
-        {props.cheering ? (
-          <Text mono color={palette.orange}>{CHEERS[Math.floor(now / 10_000) % CHEERS.length]} · enter to send</Text>
-        ) : (
-          <Text mono color={palette.muted}>waiting for you · idle {formatIdle(now - props.idleSince)}</Text>
-        )}
-        {props.nodeMissing ? (
-          <Text mono color={palette.orange}>install Node.js 18+ to see your usage · /tamagoxtix doctor</Text>
-        ) : (
         <Text mono>
-          {props.todayCount !== null && (
-            <Text mono>
-              <Text mono color={palette.yellow}>$ {formatCount(props.todayCount)}</Text>
-              <Text mono color={palette.muted}> tokens today · </Text>
-            </Text>
+          {props.cheering ? (
+            <Text mono color={palette.orange}>{CHEERS[Math.floor(now / 10_000) % CHEERS.length]} · enter to send</Text>
+          ) : (
+            <Text mono color={palette.muted}>waiting for you · idle {formatIdle(now - props.idleSince)}</Text>
           )}
-          <Text mono color={palette.muted}>/tamagoxtix for stats</Text>
+          {props.nodeMissing ? (
+            <Text mono color={palette.orange}> · install Node.js 18+ to see your usage · /tamagoxtix doctor</Text>
+          ) : props.todayCount !== null ? (
+            <Text mono color={palette.muted}>{` · ${formatCount(props.todayCount)} today`}</Text>
+          ) : null}
         </Text>
-        )}
       </Box>
       {showGithub && separator()}
       {showGithub && githubColumn}

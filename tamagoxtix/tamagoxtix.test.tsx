@@ -77,7 +77,9 @@ describe('tamagoxtix', () => {
     mock.clock(on, { now: Date.parse('2026-10-14T12:00:00Z') })
     on('session.id', () => ({ value: 'test-session' }))
     on('command.register', () => ({ value: { command: 'tamagoxtix' } }))
+    let widthBelow = 0
     on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+      widthBelow = e.props.bodyColumns
       const { Text } = $.ui.resolve(e)
       return <Text>handover: resume the band test</Text>
     })
@@ -91,6 +93,8 @@ describe('tamagoxtix', () => {
     await ui.advance(320)
     expect(await ui.find({ in: 'tamagoxtix-idle', type: 'Text', text: /waiting for you|monster/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /handover: resume the band test/ })).toBeDefined()
+    // the band below sits in the caption column: past the monster's 34 columns
+    expect(widthBelow).toBe(100 - 34)
     await ui.unmount()
   })
 

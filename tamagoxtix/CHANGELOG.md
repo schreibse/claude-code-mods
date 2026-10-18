@@ -9,11 +9,14 @@ Forked from [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix
   bands under the monster, so handover, review-walk, coderabbit-band and task-meter keep showing.
   Upstream drew its band alone.
 - The band no longer shows the 5-hour and weekly bars and the week's days: the limits already sit
-  on the prompt hint (usage-percent). The repo column now needs 125 columns instead of 160.
+  on the prompt hint (usage-percent). The repo column now needs 126 columns instead of 160.
 - The effects column beside the monster has a fixed width (11, the widest effect), so the text
   beside the scene stays put instead of shifting when an effect wider than 6 plays.
 - `/tamagoxtix animate off`: still scenes (one frame each) in the spinner and the band; the scenes
   still change and the clock still ticks. `animate on` is the default.
+- The bands of the mods beneath (task-meter's rows, handover, review-walk…) sit under the caption column,
+  indented past the monster, and get told the width that column has (`bodyColumns`).
+  The third line (`$ 185M tokens today · /tamagoxtix for stats`) folds into the muted line as `· 185M today`.
 - The spinner's token line (`$ 3.4k ▰▰▱▱▱▱▱▱ tokens`) is gone; `esc to interrupt` sits on the clock line.
   With it the `turn.step` hook that estimated the count from the streamed text.
 - Installed from the schreibse-mods marketplace or the skills folder; the herdr plugin is the

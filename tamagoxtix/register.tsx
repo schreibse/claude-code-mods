@@ -465,7 +465,8 @@ async function probeAll($: EngineInterface): Promise<Probe[]> {
 }
 
 // What the band shows at a width: the scene and caption, then the repo column (idle.tsx WIDTH).
-const BAND_WIDTH = { repo: 33 + 46 + 46 }
+// scene: 20 pixel columns, a space, the 11-wide effects column and the gap; github: the column and its separator.
+const BAND_WIDTH = { scene: 34, github: 46 + 3, repo: 34 + 46 + 46 }
 
 async function doctorText($: EngineInterface, columns = 80): Promise<string> {
   const lines = ['TamaGoxtix doctor', '']
@@ -951,13 +952,26 @@ export const register: Register = on => {
       icons: String(config.icons ?? 'nerd'),
       animate: config.animate !== false,
     }
-    // the other mods' bands (handover, review-walk, …) stack under the monster, nearest the prompt
-    const others = await next(e)
+    // the other mods' bands (running tasks, handover, …) go under the caption column, indented past
+    // the monster and told the width they have; in compact mode they stack under the line
     const { Box, Client } = $.ui.resolve(e)
+    if (mode === 'compact') {
+      const others = await next(e)
+      return (
+        <Box flexDirection="column">
+          <Client module="./idle.tsx" key="tamagoxtix-idle" props={idleProps} />
+          {others}
+        </Box>
+      )
+    }
+    const columns = e.props.bodyColumns
+    const showGithub = repo !== null && columns >= BAND_WIDTH.repo
+    const bodyColumns = columns - BAND_WIDTH.scene - (showGithub ? BAND_WIDTH.github : 0)
+    const others = await next({ ...e, props: { ...e.props, bodyColumns } })
     return (
       <Box flexDirection="column">
         <Client module="./idle.tsx" key="tamagoxtix-idle" props={idleProps} />
-        {others}
+        <Box flexDirection="column" paddingLeft={BAND_WIDTH.scene}>{others}</Box>
       </Box>
     )
   })

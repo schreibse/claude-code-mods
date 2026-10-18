@@ -1,6 +1,6 @@
 id = "tamagoxtix"
 name = "TamaGoxtix"
-version = "2.1.4"
+version = "2.2.0"
 min_herdr_version = "0.9.0"
 description = "Little pixel monsters for your agents: animated sidebar faces, token usage charts and Omarchy-style palettes."
 platforms = ["linux", "macos", "windows"]

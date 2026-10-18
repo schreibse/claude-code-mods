@@ -466,7 +466,8 @@ async function probeAll($: EngineInterface): Promise<Probe[]> {
 
 // What the band shows at a width: the scene and caption, then the repo column (idle.tsx WIDTH).
 // scene: 20 pixel columns, a space, the 11-wide effects column and the gap; github: the column and its separator.
-const BAND_WIDTH = { scene: 34, github: 46 + 3, repo: 34 + 46 + 46 }
+// Under `min` columns the band and the spinner become one line.
+const BAND_WIDTH = { min: 44, scene: 34, github: 46 + 3, repo: 34 + 46 + 46 }
 
 async function doctorText($: EngineInterface, columns = 80): Promise<string> {
   const lines = ['TamaGoxtix doctor', '']
@@ -478,7 +479,7 @@ async function doctorText($: EngineInterface, columns = 80): Promise<string> {
     if (!found) lines.push(`    needed for ${check.why}${check.required ? '' : ' (optional)'}`, `    install: ${check.install}`)
   }
   const pet = await read($, showPet)
-  const fits = columns >= BAND_WIDTH.repo ? 'scene and repo' : `scene only (the repo column needs ${BAND_WIDTH.repo} columns)`
+  const fits = columns >= BAND_WIDTH.repo ? 'scene and repo' : columns >= BAND_WIDTH.min ? `scene only (the repo column needs ${BAND_WIDTH.repo} columns)` : `one line (the scene needs ${BAND_WIDTH.min} columns)`
   lines.push(
     '',
     pet ? 'Monster band: on (/tamagoxtix pet off hides it)' : '✖ Monster band: hidden by /tamagoxtix pet off (pet on brings it back)',
@@ -906,6 +907,7 @@ export const register: Register = on => {
       word: e.props.message ?? e.props.word,
       startedAt: current?.startedAt ?? now,
       animate: (await readConfig($)).animate !== false,
+      columns: e.viewport?.columns ?? 100,
     }
     const { Client } = $.ui.resolve(e)
     return <Client module="./spinner.tsx" key="tamagoxtix-spinner" props={spinnerProps} />
@@ -925,7 +927,7 @@ export const register: Register = on => {
     if ((e.surface !== 'terminal' && e.surface !== 'desktop') || e.props.isWorking) return next(e)
     // a survey owns the band; with under 3 rows the monster shrinks to a line
     if (e.props.hasSurvey || e.props.maxRows < 1) return next(e)
-    const mode = e.props.maxRows >= 3 ? 'full' : 'compact'
+    const mode = e.props.maxRows >= 3 && e.props.bodyColumns >= BAND_WIDTH.min ? 'full' : 'compact'
     const pal = await read($, palette)
     const pet = await read($, monster)
     const show = await read($, showPet)

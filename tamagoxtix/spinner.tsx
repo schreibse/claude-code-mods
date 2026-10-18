@@ -14,11 +14,12 @@ type SceneData = { rows: Run[][]; fx: string[]; fxSlot: string; caption: string 
 
 // Draws a scene (scenes.mjs) as Text rows (monospaced, so the desktop app lines
 // them up as a terminal does): the pixels as half blocks in the monster's
-// palette colors, then the effects column.
+// palette colors, then the effects column. A row never wraps: on a narrow
+// screen the effects are cut at the edge rather than the pixels split apart.
 function sceneRows(Text: ClientElements['Text'], monster: TamaMonster, palette: TamaPalette, data: SceneData) {
   const color = (slot?: string) => (slot ? slotColor(monster, slot, palette) : undefined)
   return data.rows.map((runs, i) => (
-    <Text mono>
+    <Text mono wrap="truncate">
       {runs.map(run => (
         <Text mono color={color(run.fg)} backgroundColor={color(run.bg)}>
           {run.text}
@@ -35,8 +36,10 @@ export type SpinnerProps = {
   mode: string
   word: string
   startedAt: number
-  /** false: one still frame per scene; the clock and the bars still tick once a second. */
+  /** false: one still frame per scene; the clock still ticks once a second. */
   animate: boolean
+  /** The terminal's width: under MIN_WIDTH the spinner is one line. */
+  columns: number
 }
 
 type State = { frame: number }
@@ -47,6 +50,7 @@ const STILL_FRAME = 7 // the frame where most scenes show their effect
 const BAR_CELLS = 8
 const MAX_MARKS = 10
 const GAP = 2 // columns between the monster and the text
+const MIN_WIDTH = 44 // narrower than this: one line, no monster
 
 const MODE_LABEL: Record<string, string> = {
   requesting: 'is calling',
@@ -98,18 +102,33 @@ const Spinner: ClientModule<SpinnerProps, State> = (props, surface: ClientSurfac
   const dots = '.'.repeat((Math.floor(frame / 3) % 3) + 1).padEnd(3)
   const label = acting.caption || (MODE_LABEL[mode] ?? mode)
 
+  // too narrow for the monster: what it is up to and the time
+  if (props.columns < MIN_WIDTH) {
+    return (
+      <Text mono wrap="truncate-end">
+        <Text mono color={palette.accent} bold>
+          {props.word}
+        </Text>
+        <Text mono color={palette.accent}>{dots}</Text>
+        <Text mono color={palette.cyan}>{` ${CLOCK[seconds % 4]} ${timeLabel}`}</Text>
+        <Text mono color={palette.muted}>{` · ${monster.name} ${label}`}</Text>
+      </Text>
+    )
+  }
+
+  // the monster keeps its width; the text beside it is cut at the edge
   return (
     <Box flexDirection="row" gap={GAP} marginTop={1}>
-      <Box flexDirection="column">{sprite}</Box>
-      <Box flexDirection="column">
-        <Text mono>
+      <Box flexDirection="column" flexShrink={0}>{sprite}</Box>
+      <Box flexDirection="column" flexShrink={1}>
+        <Text mono wrap="truncate-end">
           <Text mono color={palette.accent} bold>
             {props.word}
           </Text>
           <Text mono color={palette.accent}>{dots}</Text>
           <Text mono color={palette.muted}> {monster.name} {label}</Text>
         </Text>
-        <Text mono>
+        <Text mono wrap="truncate-end">
           <Text mono color={palette.cyan}>{CLOCK[seconds % 4]} </Text>
           <Text mono color={palette.fg} bold>
             {timeLabel}

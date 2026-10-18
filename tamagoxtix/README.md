@@ -1,6 +1,6 @@
 # tamagoxtix for Claude Code
 
-A fork of [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix) 2.1.4 (MIT, by
+A fork of [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix) 2.1.6 (MIT, by
 Fabricio Oliveira de Andrade), kept here with the other mods; see [CHANGELOG.md](CHANGELOG.md) for
 what differs. The herdr plugin is in [herdr-tamagoxtix](../herdr-tamagoxtix/).
 

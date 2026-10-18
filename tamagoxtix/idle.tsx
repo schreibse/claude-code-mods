@@ -14,11 +14,12 @@ type SceneData = { rows: Run[][]; fx: string[]; fxSlot: string; caption: string 
 
 // Draws a scene (scenes.mjs) as Text rows (monospaced, so the desktop app lines
 // them up as a terminal does): the pixels as half blocks in the monster's
-// palette colors, then the effects column.
+// palette colors, then the effects column. A row never wraps: on a narrow
+// screen the effects are cut at the edge rather than the pixels split apart.
 function sceneRows(Text: ClientElements['Text'], monster: TamaMonster, palette: TamaPalette, data: SceneData) {
   const color = (slot?: string) => (slot ? slotColor(monster, slot, palette) : undefined)
   return data.rows.map((runs, i) => (
-    <Text mono>
+    <Text mono wrap="truncate">
       {runs.map(run => (
         <Text mono color={color(run.fg)} backgroundColor={color(run.bg)}>
           {run.text}
@@ -61,6 +62,9 @@ const GLYPHS = {
 // Widths of the band's parts, to decide what fits.
 // scene: 20 pixel columns, a space, the 11-wide effects column and the gap of 2
 const WIDTH = { scene: 34, caption: 46, github: 46 }
+// Under this many columns the scene and a readable caption do not fit side by
+// side, so the band becomes one line.
+const MIN_BAND = 44
 
 type State = { frame: number }
 
@@ -104,7 +108,7 @@ const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<Stat
   const data = scene(monster, props.cheering ? cheerSceneAt(monster, now) : idleSceneAt(monster, now), frame)
 
   // no room for the band: the monster's icon, what it is up to, and today
-  if (props.compact) {
+  if (props.compact || props.columns < MIN_BAND) {
     return (
       <Text mono wrap="truncate-end">
         <Text mono color={palette.accent} bold>{`${props.face ? `${props.face} ` : ''}${monster.name}`}</Text>
@@ -172,17 +176,18 @@ const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<Stat
     </Box>
   )
 
+  // the scene keeps its width; the text beside it is cut at the edge
   return (
     <Box flexDirection="row" gap={2} marginTop={1}>
-      <Box flexDirection="column">{sceneRows(Text, monster, palette, data)}</Box>
-      <Box flexDirection="column">
-        <Text mono>
+      <Box flexDirection="column" flexShrink={0}>{sceneRows(Text, monster, palette, data)}</Box>
+      <Box flexDirection="column" flexShrink={1}>
+        <Text mono wrap="truncate-end">
           <Text mono color={palette.accent} bold>
             {monster.name}
           </Text>
           <Text mono color={palette.fg}> {data.caption}</Text>
         </Text>
-        <Text mono>
+        <Text mono wrap="truncate-end">
           {props.cheering ? (
             <Text mono color={palette.orange}>{CHEERS[Math.floor(now / 10_000) % CHEERS.length]} · enter to send</Text>
           ) : (

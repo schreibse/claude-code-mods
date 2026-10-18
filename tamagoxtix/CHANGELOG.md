@@ -13,6 +13,8 @@ Forked from [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix
 - The effects column beside the monster has a fixed width (11, the widest effect), so the text
   beside the scene stays put instead of shifting when an effect wider than 6 plays.
 - `/tamagoxtix animate off`: still scenes (one frame each) in the spinner and the band; the scenes
-  still change and the clock and bars still tick. `animate on` is the default.
+  still change and the clock still ticks. `animate on` is the default.
+- The spinner's token line (`$ 3.4k ▰▰▱▱▱▱▱▱ tokens`) is gone; `esc to interrupt` sits on the clock line.
+  With it the `turn.step` hook that estimated the count from the streamed text.
 - Installed from the schreibse-mods marketplace or the skills folder; the herdr plugin is the
   sibling folder `herdr-tamagoxtix`.

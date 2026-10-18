@@ -28,7 +28,7 @@ export type TamaMonster = {
 }
 
 /** The turn the spinner is drawing: when it started and the output so far. */
-export type TamaTurn = { startedAt: number; tokens: number }
+export type TamaTurn = { startedAt: number }
 
 export type TamaUsageDay = { date: string; tokens: number; output: number }
 export type TamaUsage = {

@@ -126,8 +126,7 @@ to give those settings back.
 | --- | --- |
 | `session.start`, `session.end` | loads your palette and monster; registers `/tamagoxtix` |
 | `turn.start`, `turn.complete` | starts and stops the spinner's clock; refreshes usage and the repo column |
-| `turn.step` | counts the characters Claude streams, to estimate the token bar while a turn runs; the text is never kept or sent |
-| `session.measure` | keeps Claude Code's 5-hour and weekly limit readings for the bars |
+| `session.measure` | keeps Claude Code's 5-hour and weekly limit readings for the usage card |
 | `prompt.edit` | looks at whether the prompt box holds a prompt, to cheer you on while you type; it passes every edit on unchanged and never keeps or sends the text |
 | `ui.render` (`Spinner`, `AbovePrompt`, `CommandOutput` of `/tamagoxtix`) | draws the monster, the band above the prompt and the cards |
 | `command.run` (only `/tamagoxtix`) | answers its own command; other commands are not touched |

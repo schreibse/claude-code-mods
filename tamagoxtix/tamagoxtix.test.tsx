@@ -30,7 +30,7 @@ describe('tamagoxtix', () => {
     expect(JSON.stringify(drawn)).toContain('spinner.tsx')
   })
 
-  test('the spinner module draws the monster, the clock and the coins', async ($, on) => {
+  test('the spinner module draws the monster and the clock', async ($, on) => {
     on('session.start', ($, e) => ({ cwd: e.cwd }))
     mock.env(on, { HOME: '/nonexistent' })
     mock.clock(on, { now: Date.parse('2026-10-14T12:00:00Z') })
@@ -46,7 +46,7 @@ describe('tamagoxtix', () => {
       })
       for (let i = 0; i < 6; i++) await ui.advance(160)
       expect(await ui.find({ in: 'tamagoxtix-spinner', type: 'Text', text: /Coalescing/ })).toBeDefined()
-      expect(await ui.find({ in: 'tamagoxtix-spinner', type: 'Text', text: /tokens · esc to interrupt/ })).toBeDefined()
+      expect(await ui.find({ in: 'tamagoxtix-spinner', type: 'Text', text: /esc to interrupt/ })).toBeDefined()
       await ui.unmount()
     }
   })

@@ -796,7 +796,6 @@ async function helpText($: EngineInterface): Promise<string> {
 
 export const register: Register = on => {
   let mainTurn: string | null = null
-  let lastPush = 0
   let sidebarTimer: Timer | null = null
 
   on('session.start', async ($, e, next) => {
@@ -835,7 +834,7 @@ export const register: Register = on => {
     // the prompt was sent: no draft in the box anymore
     await update($, drafting, () => false)
     const startedAt = await $.clock.now()
-    await update($, turn, () => ({ startedAt, tokens: 0 }))
+    await update($, turn, () => ({ startedAt }))
 
     // the icon may have changed since (a pick, a reroll, herdr spreading
     // icons so no two agents share one): read it again each turn
@@ -857,38 +856,6 @@ export const register: Register = on => {
       })
     }
     return started
-  })
-
-  // Output tokens: estimated from the streamed text while it arrives, then the
-  // count the API reports once the step ends.
-  on('turn.step', async function* ($, e, next) {
-    if (e.agentId || e.turnId !== mainTurn) {
-      return yield* next(e)
-    }
-    let chars = 0
-    let base: number | null = null
-    for await (const chunk of next(e)) {
-      if (chunk.kind === 'text' || chunk.kind === 'thinking') chars += chunk.text.length
-      else if (chunk.kind === 'input') chars += chunk.json.length
-      if (chunk.kind === 'stop' && chunk.usage) {
-        const exact = chunk.usage.output_tokens
-        await update($, turn, t => (t ? { ...t, tokens: (base ?? t.tokens) + exact } : t))
-      } else {
-        const now = await $.clock.now()
-        if (now - lastPush <= 400) {
-          yield chunk
-          continue
-        }
-        lastPush = now
-        const estimate = Math.round(chars / 4)
-        await update($, turn, t => {
-          if (!t) return t
-          base ??= t.tokens
-          return { ...t, tokens: base + estimate }
-        })
-      }
-      yield chunk
-    }
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -937,7 +904,6 @@ export const register: Register = on => {
       mode: e.props.mode,
       word: e.props.message ?? e.props.word,
       startedAt: current?.startedAt ?? now,
-      tokens: current?.tokens ?? 0,
       animate: (await readConfig($)).animate !== false,
     }
     const { Client } = $.ui.resolve(e)

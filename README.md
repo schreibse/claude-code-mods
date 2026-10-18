@@ -363,6 +363,16 @@ git -C /path/to/upstream diff <forked-at>..<new> -- claude | git -C ~/.claude/sk
 git -C /path/to/upstream diff <forked-at>..<new> -- herdr  | git -C ~/.claude/skills apply -p2 --directory=herdr-tamagoxtix --3way
 ```
 
+### Band order
+
+The engine loads the user-tier hooks modules in the skills directory's on-disk order, and the first
+loaded is the outermost: its `ui.render` hook wraps the others' output. For the bands above the prompt
+that decides who stacks under whom: tamagoxtix indents the bands beneath it under its caption column, so
+task-meter must come after it and repo-line (full width, at the very bottom) before it. A clone creates
+the directories alphabetically, which gives `repo-line < tamagoxtix < task-meter`. On a filesystem that
+lists directories in creation order (btrfs), re-create an entry to move it after the others:
+`mv tamagoxtix x && mv x tamagoxtix`. `claude -p ok --debug` writes the order to `~/.claude/debug/`.
+
 ### Releasing a mod
 
 Marketplace users only get a change once the mod's `version` moves, so a change meant for them
@@ -375,3 +385,7 @@ bumps it in the same commit:
 4. Commit and push, then `claude plugin tag --push <mod>`.
 5. `gh release create <mod>--v<version> --verify-tag --title "<mod> <version>" --notes-file <entry>`,
    with the new changelog entry as the notes; links in it must be absolute.
+
+## License
+
+[MIT](LICENSE). tamagoxtix keeps its upstream author's MIT licence in its own `LICENSE`.

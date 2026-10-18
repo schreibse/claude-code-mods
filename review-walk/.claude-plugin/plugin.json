@@ -2,8 +2,11 @@
   "name": "review-walk",
   "version": "0.2.0",
   "description": "Walk a code review's findings one at a time: the skill asks per finding, the mod draws Finding N/M with a progress bar and the decisions so far",
-  "author": { "name": "Stephan Schreiber" },
+  "author": {
+    "name": "Stephan Schreiber"
+  },
   "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/review-walk",
   "repository": "https://github.com/schreibse/claude-code-mods",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "license": "MIT"
 }

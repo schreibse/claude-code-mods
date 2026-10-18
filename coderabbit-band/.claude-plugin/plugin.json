@@ -7,5 +7,6 @@
   },
   "types": "./types/index.d.ts",
   "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/coderabbit-band",
-  "repository": "https://github.com/schreibse/claude-code-mods"
+  "repository": "https://github.com/schreibse/claude-code-mods",
+  "license": "MIT"
 }

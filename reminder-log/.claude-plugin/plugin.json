@@ -6,5 +6,6 @@
     "name": "Stephan Schreiber"
   },
   "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/reminder-log",
-  "repository": "https://github.com/schreibse/claude-code-mods"
+  "repository": "https://github.com/schreibse/claude-code-mods",
+  "license": "MIT"
 }

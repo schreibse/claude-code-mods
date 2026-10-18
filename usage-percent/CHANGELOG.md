@@ -1,5 +1,9 @@
 # usage-percent changelog
 
+## 0.4.1 — 2026-10-18
+
+- The weekly reset sits eight spaces after the last bar instead of at the row's far right.
+
 ## 0.4.0 — 2026-10-18
 
 - A model-scoped weekly window (the plan's Fable or Opus allowance) draws as a fourth bar, labelled by its

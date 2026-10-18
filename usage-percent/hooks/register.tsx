@@ -8,7 +8,7 @@ import { forgeOf, hostOf, githubPipeline, gitlabPipeline, pipeline } from './pip
 import type { Pipeline } from './pipeline'
 import { scopedWindows, USAGE_URL } from './scoped'
 import type { ScopedWindow } from './scoped'
-import type { Piece, UsageLine } from '../types'
+import type { Piece } from '../types'
 
 const WINDOWS: Record<string, string> = { five_hour: '5h', seven_day: 'wk' }
 const TICK_MS = 10_000
@@ -16,6 +16,7 @@ const PIPELINE_RUNNING_MS = 60_000
 const PIPELINE_IDLE_MS = 300_000
 const AFTER_PUSH_MS = 15_000
 const SCOPED_MS = 60_000
+const RESET_GAP = ' '.repeat(8)
 
 const usageLine = atom({ plugin: 'usage-percent', key: 'line' } as const, null)
 const nxLine = atom({ plugin: 'usage-percent', key: 'nx' } as const, null)
@@ -56,8 +57,8 @@ export function isGitPush(command: string): boolean {
   return /\bgit(?:\s+-[Cc]\s+\S+)*\s+push\b/.test(command)
 }
 
-// The weekly windows share one reset, drawn once at the row's right; the 5h reset is left out.
-export function line(context: SessionContextUsage, rateLimits: readonly SessionRateLimit[], now = Date.now(), scoped: readonly ScopedWindow[] = []): UsageLine {
+// The weekly windows share one reset, drawn once a gap after the bars; the 5h reset is left out.
+export function line(context: SessionContextUsage, rateLimits: readonly SessionRateLimit[], now = Date.now(), scoped: readonly ScopedWindow[] = []): Piece[] {
   const limits = rateLimits.flatMap(limit => {
     const label = WINDOWS[limit.kind]
     return label === undefined ? [] : [{ label, percentUsed: limit.percentUsed, resetsAt: limit.resetsAt }]
@@ -65,7 +66,7 @@ export function line(context: SessionContextUsage, rateLimits: readonly SessionR
   const windows = [...limits, ...scoped]
   const left = joined([figure('ctx', context.percent ?? 0), ...windows.map(w => figure(w.label, w.percentUsed))], ' | ')
   const week = resetIn(windows.find(w => w.label === 'wk')?.resetsAt ?? scoped[0]?.resetsAt, now)
-  return { left, reset: week === '' ? [] : [dim(`resets ${week}`)] }
+  return week === '' ? left : [...left, dim(`${RESET_GAP}resets ${week}`)]
 }
 
 type Usage = { context: SessionContextUsage; rateLimits: readonly SessionRateLimit[]; scoped: ScopedWindow[]; scopedAt: number; isFetching: boolean }
@@ -236,13 +237,12 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
-    const { left, reset } = (await read($, usageLine)) ?? { left: [], reset: [] }
+    const left = (await read($, usageLine)) ?? []
     const nx = await read($, nxLine)
     const hint = await next(e)
     if (left.length === 0 && nx === null) {
       return hint
     }
-    const right = joined([nx?.right ?? [], reset], ' · ')
 
     const { Box, Text } = $.ui.resolve(e)
     const draw = (pieces: readonly Piece[]) => (
@@ -258,7 +258,7 @@ export const register: Register = on => {
         <Box>
           <Box width={0} flexGrow={1}>{draw(left)}</Box>
           {nx && nx.middle.length > 0 ? <Box>{draw(nx.middle)}</Box> : null}
-          <Box width={0} flexGrow={1} justifyContent="flex-end">{draw(right)}</Box>
+          <Box width={0} flexGrow={1} justifyContent="flex-end">{draw(nx?.right ?? [])}</Box>
         </Box>
       </Box>
     )

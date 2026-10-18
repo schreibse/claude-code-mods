@@ -52,6 +52,10 @@
     {
       "name": "tamagoxtix",
       "source": "./tamagoxtix"
+    },
+    {
+      "name": "task-meter",
+      "source": "./task-meter"
     }
   ]
 }

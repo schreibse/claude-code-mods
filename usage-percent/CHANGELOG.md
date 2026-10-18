@@ -1,5 +1,14 @@
 # usage-percent changelog
 
+## 0.4.0 — 2026-10-18
+
+- A model-scoped weekly window (the plan's Fable or Opus allowance) draws as a fourth bar, labelled by its
+  model: `ctx ▰▱▱▱ 34% | 5h ▰▰▱▱ 41% | wk ▰▰▰▱ 86% | fable ▰▰▱▱ 28%`. It comes from the usage endpoint
+  through the session's own credential, fetched at most once a minute; without a first-party login
+  there is no fourth bar.
+- The weekly reset moves to the row's far right as `resets 1d5h`, in its two largest units; the 5h
+  window no longer shows one.
+
 ## 0.3.0 — 2026-10-17
 
 - The row under the prompt draws each figure as a four-cell bar with the percent, and the 5h and

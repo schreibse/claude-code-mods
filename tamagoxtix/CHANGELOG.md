@@ -4,6 +4,11 @@ Forked from [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix
 (commit `7cbd7b2`, MIT, by Fabricio Oliveira de Andrade), synced with 2.1.6 (`dbc8c20`). Upstream's
 own history is in that repo.
 
+## 2.3.0 — 2026-10-18
+
+- The caption column's third line, beside the monster's feet, shows usage-percent's memory bar
+  (`mem ▰▰▰▱▱▱▱▱▱▱ 3.3G · psi 12%`) when that mod runs; empty otherwise.
+
 ## 2.2.0 — 2026-10-17
 
 - The band above the prompt passes the render on to the other mods (`next(e)`) and stacks their

@@ -7,7 +7,7 @@ import type { ClientElements, ClientModule, ClientSurface } from 'claude-code'
 
 import { cheerSceneAt, gitlabFox, idleSceneAt, octocat, scene } from './lib/scenes.mjs'
 import { slotColor } from './lib/monsters.mjs'
-import type { TamaGithub, TamaMonster, TamaPalette } from './types'
+import type { TamaGithub, TamaMonster, TamaPalette, TamaStatusPiece } from './types'
 
 type Run = { text: string; fg?: string; bg?: string }
 type SceneData = { rows: Run[][]; fx: string[]; fxSlot: string; caption: string }
@@ -51,6 +51,8 @@ export type IdleProps = {
   face?: string
   /** false: one still frame per scene; the scene still changes every 40 seconds. */
   animate?: boolean
+  /** The caption column's third line, beside the monster's feet: usage-percent's memory bar. */
+  status: TamaStatusPiece[]
 }
 
 // GitHub glyphs: octicons from a Nerd Font, or plain symbols without one.
@@ -199,6 +201,13 @@ const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<Stat
             <Text mono color={palette.muted}>{` · ${formatCount(props.todayCount)} today`}</Text>
           ) : null}
         </Text>
+        {props.status.length > 0 && (
+          <Text mono wrap="truncate-end">
+            {props.status.map(piece => (
+              <Text mono color={piece.tone === 'dim' ? palette.muted : palette[piece.tone]}>{piece.text}</Text>
+            ))}
+          </Text>
+        )}
       </Box>
       {showGithub && separator()}
       {showGithub && githubColumn}

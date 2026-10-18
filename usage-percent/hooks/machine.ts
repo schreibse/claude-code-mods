@@ -1,16 +1,21 @@
-import { dim, toneOf } from './pieces'
+import { bar, dim, toneOf } from './pieces'
 import type { Piece } from '../types'
 
 const GIB = 1024 ** 3
 
 export type ServeProcess = { pid: string; project: string }
 
+const MEMORY_CELLS = 10
+
+// The slice's usage as a bar of its limit; without a limit the figure alone.
 export function memory(current: number, max: number, pressureAvg10: number): Piece[] {
-  const used = { text: `${(current / GIB).toFixed(1)}G`, tone: Number.isFinite(max) ? toneOf((current / max) * 100) : 'dim' } as const
+  const percent = Number.isFinite(max) ? (current / max) * 100 : NaN
+  const figure = `${(current / GIB).toFixed(1)}G`
+  const used = Number.isFinite(percent) ? { text: `${bar(percent, MEMORY_CELLS)} ${figure}`, tone: toneOf(percent) } : dim(figure)
   if (pressureAvg10 <= 0) {
     return [dim('mem '), used]
   }
-  return [dim('mem '), used, dim(' psi '), { text: `${Math.round(pressureAvg10)}%`, tone: toneOf(pressureAvg10, 20, 50) }]
+  return [dim('mem '), used, dim(' · psi '), { text: `${Math.round(pressureAvg10)}%`, tone: toneOf(pressureAvg10, 20, 50) }]
 }
 
 export function pressureAvg10(pressureFile: string): number {

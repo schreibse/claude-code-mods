@@ -1,8 +1,10 @@
 {
   "name": "task-meter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Band above the prompt with the session's running tasks: shells, subagents, workflows, monitors, each with a progress bar where one is knowable, memory and running time",
-  "author": { "name": "Stephan Schreiber" },
+  "author": {
+    "name": "Stephan Schreiber"
+  },
   "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/task-meter",
   "repository": "https://github.com/schreibse/claude-code-mods",
   "types": "./types/index.d.ts"

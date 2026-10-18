@@ -1,5 +1,9 @@
 # task-meter changelog
 
+## 0.2.0 — 2026-10-18
+
+- The bars are ten cells wide instead of four.
+
 ## 0.1.0 — 2026-10-18
 
 First versioned release. What it does: [README](https://github.com/schreibse/claude-code-mods#readme).

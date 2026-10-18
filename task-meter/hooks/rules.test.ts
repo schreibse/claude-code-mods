@@ -53,9 +53,9 @@ test('progress: nx task count, [N/M] counter, trailing percentage, else none', (
 })
 
 test('bar fills by progress and moves without it', () => {
-  expect(bar({ done: 3, total: 4, unit: '' }, 0)).toBe('▰▰▰▱')
-  expect(bar(undefined, 0)).toBe('▰▱▱▱')
-  expect(bar(undefined, 2_000)).toBe('▱▱▰▱')
+  expect(bar({ done: 3, total: 4, unit: '' }, 0)).toBe('▰▰▰▰▰▰▰▰▱▱')
+  expect(bar(undefined, 0)).toBe('▰▱▱▱▱▱▱▱▱▱')
+  expect(bar(undefined, 2_000)).toBe('▱▱▰▱▱▱▱▱▱▱')
   expect(duration(40_000)).toBe('40s')
   expect(duration(192_000)).toBe('3m12s')
   expect(duration(3_725_000)).toBe('1h02m')

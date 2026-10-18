@@ -1,6 +1,6 @@
 import type { Progress, Task } from '../types'
 
-export const BAR_WIDTH = 4
+export const BAR_WIDTH = 10
 export const FOREGROUND_DELAY_MS = 5_000
 export const MIN_LABEL_WIDTH = 16
 /** Icon and kind before the label, and the table after it: bar, progress, memory, time with their gaps. */

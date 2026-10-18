@@ -18,6 +18,7 @@ const turn = atom({ plugin: 'tamagoxtix', key: 'turn' } as const, null)
 const usage = atom({ plugin: 'tamagoxtix', key: 'usage' } as const, null)
 const limits = atom({ plugin: 'tamagoxtix', key: 'limits' } as const, [])
 const idleSince = atom({ plugin: 'tamagoxtix', key: 'idleSince' } as const, 0)
+const memoryLine = atom({ plugin: 'usage-percent', key: 'memory' } as const, null)
 const showPet = atom({ plugin: 'tamagoxtix', key: 'showPet' } as const, true)
 const github = atom({ plugin: 'tamagoxtix', key: 'github' } as const, null)
 const nodeMissing = atom({ plugin: 'tamagoxtix', key: 'nodeMissing' } as const, false)
@@ -940,6 +941,7 @@ export const register: Register = on => {
     const cheering = await read($, drafting)
     const face = await sidebarToken($, pet, 'idle')
     const config = await readConfig($)
+    const status = await read($, memoryLine)
     const idleProps = {
       monster: pet,
       palette: pal,
@@ -953,6 +955,7 @@ export const register: Register = on => {
       face,
       icons: String(config.icons ?? 'nerd'),
       animate: config.animate !== false,
+      status: status ?? [],
     }
     // the other mods' bands (running tasks, handover, …) go under the caption column, indented past
     // the monster and told the width they have; in compact mode they stack under the line

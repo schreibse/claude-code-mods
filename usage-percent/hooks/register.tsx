@@ -3,7 +3,7 @@ import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit, 
 
 import { containerOf, directoriesOf, isUnder, memory, pressureAvg10, servedIn, serveProcesses } from './machine'
 import type { ServeProcess } from './machine'
-import { dim, joined, toneOf } from './pieces'
+import { bar, dim, joined, toneOf } from './pieces'
 import { forgeOf, hostOf, githubPipeline, gitlabPipeline, pipeline } from './pipeline'
 import type { Pipeline } from './pipeline'
 import { scopedWindows, USAGE_URL } from './scoped'
@@ -20,15 +20,11 @@ const RESET_GAP = ' '.repeat(8)
 
 const usageLine = atom({ plugin: 'usage-percent', key: 'line' } as const, null)
 const nxLine = atom({ plugin: 'usage-percent', key: 'nx' } as const, null)
+const memoryLine = atom({ plugin: 'usage-percent', key: 'memory' } as const, null)
 
-type Poll = { root: string; uid: string; head: string; pipelineAt: number; pushedAt: number; pipe: Pipeline | null; composeDirs: Map<string, string>; isBusy: boolean }
+type Poll = { root: string; isNx: boolean; uid: string; head: string; pipelineAt: number; pushedAt: number; pipe: Pipeline | null; composeDirs: Map<string, string>; isBusy: boolean }
 
 const BAR_CELLS = 4
-
-function bar(percent: number): string {
-  const filled = Math.round((Math.max(0, Math.min(100, percent)) / 100) * BAR_CELLS)
-  return '▰'.repeat(filled) + '▱'.repeat(BAR_CELLS - filled)
-}
 
 // Time until a window resets, in its two largest units: 1d5h, 3h12m, 45m.
 export function resetIn(iso: string | undefined, now: number): string {
@@ -50,7 +46,7 @@ export function resetIn(iso: string | undefined, now: number): string {
 }
 
 function figure(label: string, percent: number): Piece[] {
-  return [dim(`${label} `), { text: `${bar(percent)} ${Math.round(percent)}%`, tone: toneOf(percent) }]
+  return [dim(`${label} `), { text: `${bar(percent, BAR_CELLS)} ${Math.round(percent)}%`, tone: toneOf(percent) }]
 }
 
 export function isGitPush(command: string): boolean {
@@ -162,15 +158,20 @@ async function composeDir($: EngineInterface, poll: Poll, container: string): Pr
   return poll.composeDirs.get(container) ?? ''
 }
 
-// Memory and servers every tick; the pipeline only when HEAD moved, after a push, or when its interval is up.
+// Memory every tick, in every session; in an Nx repo also the servers, and the pipeline only when HEAD
+// moved, after a push, or when its interval is up.
 async function tick($: EngineInterface, poll: Poll) {
   if (poll.isBusy) {
     return
   }
   poll.isBusy = true
   try {
-    const [middle, ps, head] = await Promise.all([
-      memoryPieces($, poll.uid),
+    const memoryNow = await memoryPieces($, poll.uid)
+    await update($, memoryLine, () => (memoryNow.length > 0 ? memoryNow : null))
+    if (!poll.isNx) {
+      return
+    }
+    const [ps, head] = await Promise.all([
       $.process.run(['ps', '-eo', 'pid,args']),
       $.process.run(['git', 'rev-parse', 'HEAD'], { cwd: poll.root }).then(r => r.stdout.trim()),
     ])
@@ -185,7 +186,7 @@ async function tick($: EngineInterface, poll: Poll) {
     }
     const served = await servedHere($, poll, serveProcesses(ps.stdout)).catch(() => [])
     const right = joined([served.length > 0 ? [dim(`▶ ${served.join(' ')}`)] : [], poll.pipe ? pipeline(poll.pipe) : []], ' · ')
-    await update($, nxLine, () => (middle.length > 0 || right.length > 0 ? { middle, right } : null))
+    await update($, nxLine, () => (right.length > 0 ? right : null))
   } finally {
     poll.isBusy = false
   }
@@ -211,13 +212,12 @@ export const register: Register = on => {
     timer = null
     poll = null
     const root = await $.session.root()
-    if (await $.fs.exists(`${root}/nx.json`)) {
-      const uid = (await $.process.run(['id', '-u'])).stdout.trim()
-      const current: Poll = { root, uid, head: '', pipelineAt: 0, pushedAt: 0, pipe: null, composeDirs: new Map(), isBusy: false }
-      poll = current
-      startTick($, current)
-      timer = $.clock.every(TICK_MS, () => startTick($, current))
-    }
+    const isNx = await $.fs.exists(`${root}/nx.json`)
+    const uid = (await $.process.run(['id', '-u'])).stdout.trim()
+    const current: Poll = { root, isNx, uid, head: '', pipelineAt: 0, pushedAt: 0, pipe: null, composeDirs: new Map(), isBusy: false }
+    poll = current
+    startTick($, current)
+    timer = $.clock.every(TICK_MS, () => startTick($, current))
     return result
   })
 
@@ -230,7 +230,7 @@ export const register: Register = on => {
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const result = await next(e)
-    if (poll !== null && isGitPush(e.command)) {
+    if (poll?.isNx && isGitPush(e.command)) {
       poll.pushedAt = await $.clock.now()
     }
     return result
@@ -238,9 +238,9 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     const left = (await read($, usageLine)) ?? []
-    const nx = await read($, nxLine)
+    const right = (await read($, nxLine)) ?? []
     const hint = await next(e)
-    if (left.length === 0 && nx === null) {
+    if (left.length === 0 && right.length === 0) {
       return hint
     }
 
@@ -251,14 +251,12 @@ export const register: Register = on => {
       </Text>
     )
 
-    // Equal-width outer zones keep the memory zone centred.
     return (
       <Box flexDirection="column">
         {hint}
         <Box>
           <Box width={0} flexGrow={1}>{draw(left)}</Box>
-          {nx && nx.middle.length > 0 ? <Box>{draw(nx.middle)}</Box> : null}
-          <Box width={0} flexGrow={1} justifyContent="flex-end">{draw(nx?.right ?? [])}</Box>
+          <Box width={0} flexGrow={1} justifyContent="flex-end">{draw(right)}</Box>
         </Box>
       </Box>
     )

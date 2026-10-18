@@ -98,6 +98,30 @@ describe('tamagoxtix', () => {
     await ui.unmount()
   })
 
+  test('usage-percent\'s memory line sits on the band\'s third line', async ($, on) => {
+    on('session.start', ($, e) => ({ cwd: e.cwd }))
+    mock.env(on, { HOME: '/nonexistent' })
+    mock.clock(on, { now: Date.parse('2026-10-14T12:00:00Z') })
+    on('session.id', () => ({ value: 'test-session' }))
+    on('command.register', () => ({ value: { command: 'tamagoxtix' } }))
+    on('state.get', ($, e, next) =>
+      e.plugin === 'usage-percent' && e.key === 'memory'
+        ? { value: { value: [{ text: 'mem ', tone: 'dim' }, { text: '▰▰▰▱▱▱▱▱▱▱ 3.3G', tone: 'dim' }], version: 1 } }
+        : next(e),
+    )
+    emptyBandBelow(on)
+    await $.session.start(START)
+    const ui = await $.ui.mount({
+      plugin: 'tamagoxtix',
+      surface: 'terminal',
+      component: 'AbovePrompt',
+      props: { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 100 } as never,
+    })
+    await ui.advance(320)
+    expect(await ui.find({ in: 'tamagoxtix-idle', type: 'Text', text: /▰▰▰▱▱▱▱▱▱▱ 3.3G/ })).toBeDefined()
+    await ui.unmount()
+  })
+
   test('while you type a prompt the monster cheers you on', async ($, on) => {
     // the bottom of prompt.edit stands for the editor: the splice applied
     on('prompt.edit', ($, e) => {

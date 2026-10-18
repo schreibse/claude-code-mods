@@ -1,5 +1,12 @@
 # usage-percent changelog
 
+## 0.5.0 — 2026-10-18
+
+- Memory leaves the row: it is sampled every 10 s in every session (not only Nx repos) and published
+  as a ten-cell bar of `claude.slice`'s limit (`mem ▰▰▰▱▱▱▱▱▱▱ 3.3G · psi 12%`) for TamaGoxtix's band
+  to draw on its third line. The row keeps the usage bars on the left and, in Nx repos, the servers
+  and the pipeline on the right.
+
 ## 0.4.1 — 2026-10-18
 
 - The weekly reset sits eight spaces after the last bar instead of at the row's far right.

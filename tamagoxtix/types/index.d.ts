@@ -1,3 +1,5 @@
+export type TamaStatusPiece = { text: string; tone: 'dim' | 'yellow' | 'red' | 'green' }
+
 export type TamaPalette = {
   id: string
   label: string
@@ -58,6 +60,8 @@ export type TamaLimit = { kind: string; percentUsed: number; resetsAt?: string }
 
 declare module 'claude-code' {
   interface PluginState {
+    /** usage-percent's memory line, drawn on the band's third line when that mod runs. */
+    'usage-percent': { memory: TamaStatusPiece[] | null }
     tamagoxtix: {
       palette: TamaPalette | null
       monster: TamaMonster | null

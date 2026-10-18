@@ -4,6 +4,11 @@ export function toneOf(percent: number, warn = 80, alarm = 95): Tone {
   return percent >= alarm ? 'red' : percent >= warn ? 'yellow' : 'dim'
 }
 
+export function bar(percent: number, cells: number): string {
+  const filled = Math.round((Math.max(0, Math.min(100, percent)) / 100) * cells)
+  return '▰'.repeat(filled) + '▱'.repeat(cells - filled)
+}
+
 export function dim(text: string): Piece {
   return { text, tone: 'dim' }
 }

@@ -1,6 +1,6 @@
 {
   "name": "task-meter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Band above the prompt with the session's running tasks: shells, subagents, workflows, monitors, each with a progress bar where one is knowable, memory and running time",
   "author": {
     "name": "Stephan Schreiber"

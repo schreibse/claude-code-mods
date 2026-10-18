@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Board, Task } from '../types'
-import { backgroundIdOf, bar, duration, fit, isShown, kindText, labelWidth, memText, memTone, monitorProgress, pairForeground, parsePs, progressOf, progressText, toolShells, treeOrder, treeRssKb } from './rules'
+import { LABEL_GAP, backgroundIdOf, bar, duration, fit, isShown, kindText, labelWidth, memText, memTone, monitorProgress, pairForeground, parsePs, progressOf, progressText, toolShells, treeOrder, treeRssKb } from './rules'
 
 const board = atom({ plugin: 'task-meter', key: 'board' } as const, { tasks: [], now: 0 } as Board)
 
@@ -214,7 +214,7 @@ export const register: Register = on => {
       return band
     }
     const { Box, Text } = $.ui.resolve(e)
-    const width = labelWidth((e.props as { bodyColumns?: number }).bodyColumns ?? 100)
+    const width = labelWidth((e.props as { bodyColumns?: number }).bodyColumns ?? 100, shown.map(task => task.label))
     return (
       <Box flexDirection="column">
         {band}
@@ -223,7 +223,7 @@ export const register: Register = on => {
             <Box key={task.key}>
               {isChild ? <Text dimColor>{'  └ '.padEnd(8)}</Text> : <Text color="cyan">{task.isBackground ? '↻ ' : '⏵ '}</Text>}
               {isChild ? null : <Text dimColor>{`${kindText(task)} `}</Text>}
-              <Text>{`${fit(task.label, width)} `}</Text>
+              <Text>{fit(task.label, width) + ' '.repeat(LABEL_GAP)}</Text>
               <Text color={task.progress ? 'cyan' : undefined} dimColor={!task.progress}>{bar(task.progress, now)}</Text>
               <Text dimColor>{`  ${progressText(task).padStart(8)}`}</Text>
               <Text color={memTone(task.memKb)} dimColor={!memTone(task.memKb)}>{`  ${memText(task.memKb).padStart(5)}`}</Text>

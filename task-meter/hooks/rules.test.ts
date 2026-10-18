@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import type { Task } from '../types'
-import { backgroundIdOf, bar, duration, fit, memText, pairForeground, parsePs, progressOf, toolShells, treeOrder, treeRssKb } from './rules'
+import { labelWidth, backgroundIdOf, bar, duration, fit, memText, pairForeground, parsePs, progressOf, toolShells, treeOrder, treeRssKb } from './rules'
 
 const SNAPSHOT = `/bin/bash -c source /home/me/.claude/shell-snapshots/snapshot-bash-1.sh 2>/dev/null || true && eval`
 const PS = [
@@ -65,6 +65,9 @@ test('a long label is cut at a word and padded to the width', () => {
   expect(fit('check-runner: Registration e2e after login', 30)).toBe('check-runner: Registration…   ')
   expect(fit('short', 10)).toBe('short     ')
   expect(fit('averyveryverylongsinglewordlabel', 10)).toBe('averyvery…')
+  expect(labelWidth(100, ['short', 'a longer label here'])).toBe(19)
+  expect(labelWidth(60, ['a label far longer than the sixty columns leave for it'])).toBe(16)
+  expect(labelWidth(40, ['x'.repeat(50)])).toBe(16)
 })
 
 test("an agent's foreground shells follow it as children", () => {

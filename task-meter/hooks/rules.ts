@@ -6,6 +6,8 @@ export const MIN_LABEL_WIDTH = 16
 /** Icon and kind before the label, and the table after it: bar, progress, memory, time with their gaps. */
 export const PREFIX_WIDTH = 8
 export const TABLE_WIDTH = BAR_WIDTH + 2 + 8 + 2 + 5 + 2 + 5
+/** Between the label column and the table, as usage-percent's reset gap. */
+export const LABEL_GAP = 8
 
 export type ProcessRow = { pid: number; ppid: number; rssKb: number; args: string }
 
@@ -156,8 +158,11 @@ export function fit(text: string, width: number): string {
   return `${cut >= Math.floor(width / 2) ? head.slice(0, cut) : head}…`.padEnd(width)
 }
 
-export function labelWidth(bodyColumns: number): number {
-  return Math.max(MIN_LABEL_WIDTH, bodyColumns - 2 - PREFIX_WIDTH - 1 - TABLE_WIDTH)
+/** The label column is as wide as the longest label shown, within what the width leaves for it. */
+export function labelWidth(bodyColumns: number, labels: readonly string[]): number {
+  const available = Math.max(MIN_LABEL_WIDTH, bodyColumns - 2 - PREFIX_WIDTH - LABEL_GAP - TABLE_WIDTH)
+  const longest = Math.max(1, ...labels.map(label => label.split('\n')[0]?.trim().length ?? 0))
+  return Math.min(available, longest)
 }
 
 const KIND_LABEL: Record<Task['kind'], string> = { shell: 'shell', agent: 'agent', workflow: 'wflow', monitor: 'watch' }

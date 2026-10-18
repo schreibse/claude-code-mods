@@ -1,5 +1,9 @@
 # task-meter changelog
 
+## 0.3.0 — 2026-10-18
+
+- The bar, progress, memory and time columns follow the longest label at a gap of eight spaces instead of sitting at the band's right edge.
+
 ## 0.2.0 — 2026-10-18
 
 - The bars are ten cells wide instead of four.

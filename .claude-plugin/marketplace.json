@@ -56,6 +56,10 @@
     {
       "name": "task-meter",
       "source": "./task-meter"
+    },
+    {
+      "name": "repo-line",
+      "source": "./repo-line"
     }
   ]
 }

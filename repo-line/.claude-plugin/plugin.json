@@ -1,0 +1,11 @@
+{
+  "name": "repo-line",
+  "version": "0.1.0",
+  "description": "A line right above the prompt with the repository's name as a badge in the repository's own colour, the branch and the worktree, so a prompt never goes to the wrong session",
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/repo-line",
+  "repository": "https://github.com/schreibse/claude-code-mods",
+  "types": "./types/index.d.ts"
+}

@@ -196,9 +196,23 @@ function startTick($: EngineInterface, poll: Poll): void {
   void tick($, poll).catch((error: unknown) => $.ui.log(`usage-percent: ${String(error)}`, { to: 'debug' }))
 }
 
+type Sampler = { poll: Poll | null; timer: Timer | null }
+
+async function startPolling($: EngineInterface, sampler: Sampler) {
+  sampler.timer?.cancel()
+  sampler.timer = null
+  sampler.poll = null
+  const root = await $.session.root()
+  const isNx = await $.fs.exists(`${root}/nx.json`)
+  const uid = (await $.process.run(['id', '-u'])).stdout.trim()
+  const current: Poll = { root, isNx, uid, head: '', pipelineAt: 0, pushedAt: 0, pipe: null, composeDirs: new Map(), isBusy: false }
+  sampler.poll = current
+  startTick($, current)
+  sampler.timer = $.clock.every(TICK_MS, () => startTick($, current))
+}
+
 export const register: Register = on => {
-  let poll: Poll | null = null
-  let timer: Timer | null = null
+  const sampler: Sampler = { poll: null, timer: null }
   const usage: Usage = { context: {} as SessionContextUsage, rateLimits: [], scoped: [], scopedAt: 0, isFetching: false }
 
   on('session.start', async ($, e, next) => {
@@ -207,31 +221,25 @@ export const register: Register = on => {
     Object.assign(usage, { context, rateLimits })
     await redraw($, usage)
     startRefresh($, usage)
-
-    timer?.cancel()
-    timer = null
-    poll = null
-    const root = await $.session.root()
-    const isNx = await $.fs.exists(`${root}/nx.json`)
-    const uid = (await $.process.run(['id', '-u'])).stdout.trim()
-    const current: Poll = { root, isNx, uid, head: '', pipelineAt: 0, pushedAt: 0, pipe: null, composeDirs: new Map(), isBusy: false }
-    poll = current
-    startTick($, current)
-    timer = $.clock.every(TICK_MS, () => startTick($, current))
+    await startPolling($, sampler)
     return result
   })
 
+  // a hot reload of the skills dir re-runs register without a session.start, so the first measure re-arms the timer
   on('session.measure', async ($, e, next) => {
     Object.assign(usage, { context: e.context, rateLimits: e.rateLimits })
     await redraw($, usage)
     startRefresh($, usage)
+    if (sampler.timer === null) {
+      await startPolling($, sampler)
+    }
     return next(e)
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const result = await next(e)
-    if (poll?.isNx && isGitPush(e.command)) {
-      poll.pushedAt = await $.clock.now()
+    if (sampler.poll?.isNx && isGitPush(e.command)) {
+      sampler.poll.pushedAt = await $.clock.now()
     }
     return result
   })

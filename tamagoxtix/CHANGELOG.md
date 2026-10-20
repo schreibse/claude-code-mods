@@ -4,6 +4,15 @@ Forked from [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix
 (commit `7cbd7b2`, MIT, by Fabricio Oliveira de Andrade), synced with 2.1.6 (`dbc8c20`). Upstream's
 own history is in that repo.
 
+## 2.4.0 — 2026-10-19
+
+- The memory bar also sits on the spinner's third line while Claude works; before, it showed only
+  between turns.
+- The repo column beside the band is gone (upstream's octocat/fox card with stars, issues, PRs, CI),
+  and with it every `git`/`gh`/`glab` call and public forge API request the band made: it appeared
+  only in panes ≥ 126 columns wide, and repo-line already shows repo and branch. `/tamagoxtix
+  doctor` no longer checks `gh`/`glab`.
+
 ## 2.3.0 — 2026-10-18
 
 - The caption column's third line, beside the monster's feet, shows usage-percent's memory bar

@@ -127,3 +127,31 @@ test('a push counts with -C or -c options before it', () => {
   expect(isGitPush('git pushx')).toBe(false)
   expect(isGitPush('git log --grep push')).toBe(false)
 })
+
+test('a measure re-arms the memory sampler once when no session.start armed it (a hot reload)', async ($, on) => {
+  on('session.measure', (_, e) => ({ changed: e.changed }))
+  const clock = mock.clock(on, { now: NOW })
+  on('session.authorize', () => ({ value: null }))
+  on('session.root', () => ({ value: '/tmp/plain' }))
+  on('fs.exists', () => ({ value: false }))
+  const reads: string[] = []
+  on('fs.read', (_, e) => {
+    reads.push(e.path)
+    throw new Error('ENOENT')
+  })
+  let uids = 0
+  on('process.run', (_, e) => {
+    if (e.argv.join(' ') === 'id -u') uids++
+    return { value: { exitCode: 0, stdout: '1000\n', stderr: '' } }
+  })
+  const measure = () => $.session.measure({ context: { window: 200000, percent: 34 }, rateLimits: [], changed: ['context'] })
+
+  await measure()
+  await clock.advance(0)
+  const first = reads.length
+  expect(first).toBeGreaterThan(0)
+  await measure()
+  await clock.advance(10_000)
+  expect(uids).toBe(1)
+  expect(reads.length).toBeGreaterThan(first)
+})

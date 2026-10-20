@@ -7,7 +7,7 @@ import type { ClientElements, ClientModule, ClientSurface } from 'claude-code'
 
 import { cheerSceneAt, gitlabFox, idleSceneAt, octocat, scene } from './lib/scenes.mjs'
 import { slotColor } from './lib/monsters.mjs'
-import type { TamaGithub, TamaMonster, TamaPalette, TamaStatusPiece } from './types'
+import type { TamaMonster, TamaPalette, TamaStatusPiece } from './types'
 
 type Run = { text: string; fg?: string; bg?: string }
 type SceneData = { rows: Run[][]; fx: string[]; fxSlot: string; caption: string }
@@ -35,12 +35,8 @@ export type IdleProps = {
   palette: TamaPalette
   idleSince: number
   todayCount: number | null
-  /** The project's GitHub repository, or null when it is not on GitHub. */
-  github: TamaGithub | null
-  /** The band's width: columns that do not fit are left out. */
+  /** The band's width: under MIN_BAND it is one line. */
   columns: number
-  /** "nerd" draws Nerd Font icons, anything else plain symbols. */
-  icons: string
   /** `node` could not be started, so there are no usage numbers. */
   nodeMissing: boolean
   /** You are typing a prompt: cheer scenes instead of idle ones. */
@@ -55,15 +51,6 @@ export type IdleProps = {
   status: TamaStatusPiece[]
 }
 
-// GitHub glyphs: octicons from a Nerd Font, or plain symbols without one.
-const GLYPHS = {
-  nerd: { branch: '\u{f418}', issue: '\u{f41b}', pr: '\u{f407}', tag: '\u{f412}', star: '\u{f41e}', ok: '\u{f49e}', fail: '\u{f52f}', pending: '\u{f444}' },
-  plain: { branch: '⎇', issue: '◎', pr: '⇄', tag: '⌁', star: '★', ok: '✓', fail: '✗', pending: '●' },
-}
-
-// Widths of the band's parts, to decide what fits.
-// scene: 20 pixel columns, a space, the 11-wide effects column and the gap of 2
-const WIDTH = { scene: 34, caption: 46, github: 46 }
 // Under this many columns the scene and a readable caption do not fit side by
 // side, so the band becomes one line.
 const MIN_BAND = 44
@@ -125,59 +112,6 @@ const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<Stat
     )
   }
 
-  const separator = () => (
-    <Box flexDirection="column">{['│', '│', '│'].map(line => <Text mono color={palette.muted}>{line}</Text>)}</Box>
-  )
-  const showGithub = props.github !== null && props.columns >= WIDTH.scene + WIDTH.caption + WIDTH.github
-
-  // the repository: an octocat for GitHub or a fox for GitLab, then name and
-  // stars, branch and its state,
-  // version, open issues and pull requests, and the last CI run
-  const g = props.github
-  const icon = props.icons === 'nerd' ? GLYPHS.nerd : GLYPHS.plain
-  const githubColumn = g && (
-    <Box flexDirection="row" gap={2}>
-      <Box flexDirection="column">
-        {(g.forge === 'gitlab' ? gitlabFox(frame) : octocat(frame, 'fg')).map(runs => (
-          <Text mono>
-            {runs.map(run => (
-              <Text
-                color={run.fg ? (palette as Record<string, string>)[run.fg] ?? palette.fg : undefined}
-                backgroundColor={run.bg ? (palette as Record<string, string>)[run.bg] ?? palette.fg : undefined}
-              >
-                {run.text}
-              </Text>
-            ))}
-          </Text>
-        ))}
-      </Box>
-      <Box flexDirection="column">
-        <Text mono>
-          <Text mono color={palette.fg} bold>
-            {g.repo}
-          </Text>
-          {g.stars !== null && <Text mono color={palette.yellow}>{`  ${icon.star} ${g.stars}`}</Text>}
-          {g.ci && (
-            <Text mono color={g.ci === 'success' ? palette.green : g.ci === 'failure' ? palette.red : palette.yellow}>
-              {`  ${g.ci === 'success' ? icon.ok : g.ci === 'failure' ? icon.fail : icon.pending} ci`}
-            </Text>
-          )}
-        </Text>
-        <Text mono>
-          <Text mono color={palette.magenta}>{`${icon.branch} ${g.branch}`}</Text>
-          {g.ahead > 0 && <Text mono color={palette.green}>{` ↑${g.ahead}`}</Text>}
-          {g.behind > 0 && <Text mono color={palette.orange}>{` ↓${g.behind}`}</Text>}
-          {g.dirty > 0 && <Text mono color={palette.yellow}>{` ●${g.dirty}`}</Text>}
-        </Text>
-        <Text mono>
-          {g.version && <Text mono color={palette.cyan}>{`${icon.tag} ${g.version}  `}</Text>}
-          {g.issues !== null && <Text mono color={palette.green}>{`${icon.issue} ${g.issues}  `}</Text>}
-          {g.prs !== null && <Text mono color={palette.blue}>{`${icon.pr} ${g.prs}`}</Text>}
-        </Text>
-      </Box>
-    </Box>
-  )
-
   // the scene keeps its width; the text beside it is cut at the edge
   return (
     <Box flexDirection="row" gap={2} marginTop={1}>
@@ -209,8 +143,6 @@ const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<Stat
           </Text>
         )}
       </Box>
-      {showGithub && separator()}
-      {showGithub && githubColumn}
     </Box>
   )
 }

@@ -1,5 +1,10 @@
 # usage-percent changelog
 
+## 0.5.1 — 2026-10-19
+
+- The memory sampler re-arms on the next measure after a hot reload of the skills dir, which re-runs
+  the hooks without a `session.start`; long sessions stopped updating the memory bar.
+
 ## 0.5.0 — 2026-10-18
 
 - Memory leaves the row: it is sampled every 10 s in every session (not only Nx repos) and published

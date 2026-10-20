@@ -1,7 +1,7 @@
 {
   "name": "tamagoxtix",
   "displayName": "TamaGoxtix",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "A little pixel monster in place of the spinner: animated by what Claude is doing, with a visual timer, a stack of token coins, usage charts and Omarchy-style palettes.",
   "author": {
     "name": "Fabricio Oliveira de Andrade",

@@ -122,6 +122,24 @@ describe('tamagoxtix', () => {
     await ui.unmount()
   })
 
+  test('the spinner keeps usage-percent\'s memory line while Claude works', async ($, on) => {
+    on('session.start', ($, e) => ({ cwd: e.cwd }))
+    mock.env(on, { HOME: '/nonexistent' })
+    mock.clock(on, { now: Date.parse('2026-10-14T12:00:00Z') })
+    on('session.id', () => ({ value: 'test-session' }))
+    on('command.register', () => ({ value: { command: 'tamagoxtix' } }))
+    on('state.get', ($, e, next) =>
+      e.plugin === 'usage-percent' && e.key === 'memory'
+        ? { value: { value: [{ text: 'mem ', tone: 'dim' }, { text: '▰▰▰▱▱▱▱▱▱▱ 3.3G', tone: 'dim' }], version: 1 } }
+        : next(e),
+    )
+    await $.session.start(START)
+    const ui = await $.ui.mount({ plugin: 'tamagoxtix', surface: 'terminal', component: 'Spinner', props: SPINNER })
+    await ui.advance(160)
+    expect(await ui.find({ in: 'tamagoxtix-spinner', type: 'Text', text: /▰▰▰▱▱▱▱▱▱▱ 3.3G/ })).toBeDefined()
+    await ui.unmount()
+  })
+
   test('while you type a prompt the monster cheers you on', async ($, on) => {
     // the bottom of prompt.edit stands for the editor: the splice applied
     on('prompt.edit', ($, e) => {
@@ -334,7 +352,7 @@ describe('tamagoxtix', () => {
     expect(result.text).toContain('✖ Node.js 18+')
     expect(result.text).toContain('install: https://nodejs.org')
     expect(result.text).toContain('✔ git')
-    expect(result.text).toContain('○ gh (GitHub CLI)')
+    expect(result.text).not.toContain('gh (GitHub CLI)')
     expect(result.text).toContain('/tamagoxtix icons plain')
   })
 
@@ -360,33 +378,11 @@ describe('tamagoxtix', () => {
     }
     const result = await $.command.run({ command: 'tamagoxtix', args: 'doctor', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
     expect(result.text).toContain('Monster band: on')
-    expect(result.text).toContain('100 columns, room for scene only')
+    expect(result.text).toContain('100 columns, room for the scene')
     expect(result.text).toContain('shrinks to one line')
   })
 
-  test('outside a repository git is asked once, not on every turn', async ($, on) => {
-    let remotes = 0
-    on('session.start', ($, e) => ({ cwd: e.cwd }))
-    mock.env(on, { HOME: '/nonexistent' })
-    mock.clock(on, { now: Date.parse('2026-10-14T12:00:00Z') })
-    on('session.id', () => ({ value: 'test-session' }))
-    on('session.cwd', () => ({ value: '/tmp/not-a-repo' }))
-    on('store.get', () => ({ value: undefined }))
-    on('command.register', () => ({ value: { command: 'tamagoxtix' } }))
-    on('process.run', ($, e) => {
-      if (e.argv[0] === 'git') {
-        remotes++
-        return { value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' } }
-      }
-      throw new Error('ENOENT')
-    })
-    await $.session.start(START)
-    await $.session.start(START)
-    await $.session.start(START)
-    expect(remotes).toBe(1)
-  })
-
-  test('the repo column reads stars, issues, pull requests and CI from gh', async ($, on) => {
+  test('the band asks no forge and draws no repo card beside the monster', async ($, on) => {
     const asked: string[] = []
     on('session.start', ($, e) => ({ cwd: e.cwd }))
     mock.env(on, { HOME: '/nonexistent' })
@@ -397,22 +393,10 @@ describe('tamagoxtix', () => {
     on('command.register', () => ({ value: { command: 'tamagoxtix' } }))
     emptyBandBelow(on)
     on('process.run', ($, e) => {
-      const cmd = e.argv.join(' ')
-      asked.push(cmd)
-      const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } })
-      if (cmd === 'git remote get-url origin') return out('git@github.com:octo/demo.git\n')
-      if (cmd === 'git rev-parse --abbrev-ref HEAD') return out('main\n')
-      if (cmd.startsWith('git ')) return out('')
-      if (cmd === 'gh api repos/octo/demo') return out(JSON.stringify({ open_issues_count: 7, stargazers_count: 42 }))
-      if (cmd.startsWith('gh pr list -R octo/demo')) return out(JSON.stringify([{ number: 1 }, { number: 2 }]))
-      if (cmd.startsWith('gh run list -R octo/demo --branch main')) return out(JSON.stringify([{ status: 'completed', conclusion: 'success' }]))
+      asked.push(e.argv.join(' '))
       throw new Error('ENOENT')
     })
-    on('http.fetch', () => {
-      throw new Error('no network in this test')
-    })
     await $.session.start(START)
-    // the repo column is refreshed in the background after the start
     await clock.advance(1)
     const ui = await $.ui.mount({
       plugin: 'tamagoxtix',
@@ -421,10 +405,8 @@ describe('tamagoxtix', () => {
       props: { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 200 } as never,
     })
     await ui.advance(320)
-    expect(asked).toContain('gh api repos/octo/demo')
-    expect(await ui.find({ in: 'tamagoxtix-idle', type: 'Text', text: /42/ })).toBeDefined()
-    // 7 open issues on GitHub include the 2 pull requests
-    expect(await ui.find({ in: 'tamagoxtix-idle', type: 'Text', text: /\b5\b/ })).toBeDefined()
+    expect(asked.filter(cmd => /^(git|gh|glab) /.test(cmd))).toEqual([])
+    expect(await ui.find({ in: 'tamagoxtix-idle', type: 'Text', text: /│/ })).toBeUndefined()
     await ui.unmount()
   })
 

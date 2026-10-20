@@ -1,7 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import { clean, parseRemote } from './lib/forge.mjs'
 import { DEFAULT_ICON, iconByName, iconFor, ICONS, iconToken } from './lib/icons.mjs'
 import { makeMonster, slotColor, spriteRuns } from './lib/monsters.mjs'
 import {
@@ -10,7 +9,7 @@ import {
   paletteChoices,
   resolvePalette,
 } from './lib/palettes.mjs'
-import type { TamaGithub, TamaLimit, TamaMonster, TamaPalette, TamaUsage } from './types'
+import type { TamaLimit, TamaMonster, TamaPalette, TamaUsage } from './types'
 
 const palette = atom({ plugin: 'tamagoxtix', key: 'palette' } as const, null)
 const monster = atom({ plugin: 'tamagoxtix', key: 'monster' } as const, null)
@@ -20,12 +19,8 @@ const limits = atom({ plugin: 'tamagoxtix', key: 'limits' } as const, [])
 const idleSince = atom({ plugin: 'tamagoxtix', key: 'idleSince' } as const, 0)
 const memoryLine = atom({ plugin: 'usage-percent', key: 'memory' } as const, null)
 const showPet = atom({ plugin: 'tamagoxtix', key: 'showPet' } as const, true)
-const github = atom({ plugin: 'tamagoxtix', key: 'github' } as const, null)
 const nodeMissing = atom({ plugin: 'tamagoxtix', key: 'nodeMissing' } as const, false)
 const drafting = atom({ plugin: 'tamagoxtix', key: 'drafting' } as const, false)
-// The folder last found to hold no repository (or no remote), and when: git
-// is not asked again there for a while.
-const noRepo = atom({ plugin: 'tamagoxtix', key: 'noRepo' } as const, null)
 // The agent session herdr recorded for this pane, once it has one.
 const herdrSeed = atom({ plugin: 'tamagoxtix', key: 'herdrSeed' } as const, null)
 
@@ -117,10 +112,6 @@ async function loadPalette($: EngineInterface, choice?: string): Promise<TamaPal
 // not installed rejects.
 type RunResult = { exitCode: number; stdout: string; stderr?: string }
 
-function okText(result: RunResult): string | null {
-  return result.exitCode === 0 ? result.stdout.trim() : null
-}
-
 // ---- herdr ----
 
 async function herdrPane($: EngineInterface): Promise<string | undefined> {
@@ -190,211 +181,6 @@ async function paintSidebar($: EngineInterface, pet: TamaMonster, state: string)
   await reportFace($, pane, await sidebarToken($, pet, state))
 }
 
-// ---- the project's GitHub repository ----
-
-const GITHUB_TTL = 10 * 60_000
-const RUN = { timeoutMs: 10_000 }
-
-const UNRESERVED = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~'
-const HEX = '0123456789ABCDEF'
-
-// A URL path segment: each byte outside the unreserved set as %XX.
-function encodeSegment(text: string): string {
-  let out = ''
-  for (const byte of new TextEncoder().encode(text)) {
-    const ch = String.fromCharCode(byte)
-    if (UNRESERVED.includes(ch)) out += ch
-    else out += '%' + HEX.charAt(Math.floor(byte / 16)) + HEX.charAt(byte % 16)
-  }
-  return out
-}
-
-// A number from a JSON field, or null.
-function numberOr(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-// Parses JSON a program printed, or null.
-function parseJson(text: string | null): unknown {
-  if (!text) return null
-  try {
-    return JSON.parse(text)
-  } catch {
-    return null
-  }
-}
-
-type Remote = Pick<TamaGithub, 'issues' | 'prs' | 'stars' | 'ci'>
-
-// One read of a forge's public API over https, for a public repository when
-// gh or glab is missing or not signed in; no credentials are sent. The host is
-// api.github.com for GitHub, or the GitLab host named in the git remote.
-async function publicApi($: EngineInterface, host: string, pathname: string): Promise<unknown> {
-  try {
-    const res = await $.http.fetch(`https://${host}/${pathname}`)
-    return res.ok ? JSON.parse(res.text) : null
-  } catch {
-    return null
-  }
-}
-
-const GITHUB_API = 'api.github.com'
-
-async function fetchGithub($: EngineInterface, path: string, branch: string): Promise<Remote> {
-  const remote: Remote = { issues: null, prs: null, stars: null, ci: null }
-  let repoText: string | null = null
-  let prsText: string | null = null
-  let runsText: string | null = null
-  try {
-    const repoInfo = await $.process.run(['gh', 'api', 'repos/' + path], RUN)
-    repoText = okText(repoInfo)
-    const openPrs = await $.process.run(['gh', 'pr', 'list', '-R', path, '--state', 'open', '--limit', '100', '--json', 'number'], RUN)
-    prsText = okText(openPrs)
-    const lastRun = await $.process.run(['gh', 'run', 'list', '-R', path, '--branch', branch, '--limit', '1', '--json', 'status,conclusion'], RUN)
-    runsText = okText(lastRun)
-  } catch {}
-  let repoJson = parseJson(repoText) as { open_issues_count?: unknown; stargazers_count?: unknown } | null
-  if (!repoJson) {
-    // no gh: the public API still answers for public repositories
-    const fromApi = await publicApi($, GITHUB_API, `repos/${path}`)
-    repoJson = fromApi as { open_issues_count?: unknown; stargazers_count?: unknown } | null
-  }
-  const prList = parseJson(prsText)
-  const runList = parseJson(runsText)
-  if (Array.isArray(prList)) remote.prs = prList.length
-  if (repoJson) {
-    const open = numberOr(repoJson.open_issues_count)
-    // GitHub counts pull requests among the open issues
-    remote.issues = open === null ? null : Math.max(0, open - (remote.prs ?? 0))
-    remote.stars = numberOr(repoJson.stargazers_count)
-  }
-  const lastRunJson = Array.isArray(runList) ? (runList[0] as { status?: string; conclusion?: string } | undefined) : undefined
-  if (lastRunJson && lastRunJson.status) {
-    if (lastRunJson.status !== 'completed') remote.ci = 'pending'
-    else remote.ci = lastRunJson.conclusion === 'success' ? 'success' : 'failure'
-  }
-  return remote
-}
-
-// One GitLab API read: through glab when it is installed and signed in, else
-// the instance's public API, https://<host>/api/v4/<endpoint> (public
-// projects only, no credentials sent).
-async function gitlabGet($: EngineInterface, host: string, endpoint: string): Promise<unknown> {
-  let viaGlab: string | null = null
-  try {
-    const answer = await $.process.run(['glab', 'api', '--hostname', host, endpoint], RUN)
-    viaGlab = okText(answer)
-  } catch {}
-  if (viaGlab) {
-    try {
-      return JSON.parse(viaGlab)
-    } catch {}
-  }
-  const fromApi = await publicApi($, host, `api/v4/${endpoint}`)
-  return fromApi
-}
-
-// How many items a GitLab list has: its x-total header, else the list itself.
-async function gitlabCount($: EngineInterface, host: string, endpoint: string): Promise<number | null> {
-  try {
-    const res = await $.http.fetch(`https://${host}/api/v4/${endpoint}&per_page=1`)
-    const total = Object.entries(res.headers).find(([k]) => k.toLowerCase() === 'x-total')?.[1]
-    if (res.ok && total !== undefined) return Number(total)
-  } catch {}
-  const list = await gitlabGet($, host, `${endpoint}&per_page=100`)
-  return Array.isArray(list) ? list.length : null
-}
-
-// GitLab through glab when it is installed and signed in, else the
-// instance's public API (public projects only).
-async function fetchGitlab($: EngineInterface, host: string, path: string, branch: string): Promise<Remote> {
-  const remote: Remote = { issues: null, prs: null, stars: null, ci: null }
-  const id = encodeSegment(path)
-  const project = (await gitlabGet($, host, `projects/${id}`)) as { star_count?: number; open_issues_count?: number } | null
-  if (project) remote.stars = project.star_count ?? null
-  remote.issues = project?.open_issues_count ?? (await gitlabCount($, host, `projects/${id}/issues?state=opened`))
-  remote.prs = await gitlabCount($, host, `projects/${id}/merge_requests?state=opened`)
-  const pipelines = await gitlabGet($, host, `projects/${id}/pipelines?ref=${encodeSegment(branch)}&per_page=1`)
-  const status = Array.isArray(pipelines) ? (pipelines[0] as { status?: string } | undefined)?.status : undefined
-  if (status) remote.ci = status === 'success' ? 'success' : status === 'failed' || status === 'canceled' ? 'failure' : 'pending'
-  return remote
-}
-
-// Local facts from git every time (cheap); the forge's part (issues, pull or
-// merge requests, stars, CI) at most every ten minutes. A folder with no
-// repository is asked again only after ten minutes (or in another folder).
-async function refreshGithub($: EngineInterface) {
-  let cwd = ''
-  try {
-    cwd = await $.session.cwd()
-  } catch {}
-  const skip = await read($, noRepo)
-  const now = await $.clock.now()
-  if (skip?.cwd === cwd && now - skip.at < GITHUB_TTL) return
-  let remoteUrl: string | null = null
-  try {
-    const origin = await $.process.run(['git', 'remote', 'get-url', 'origin'], RUN)
-    remoteUrl = okText(origin)
-  } catch {}
-  const parsed = parseRemote(remoteUrl)
-  if (!parsed) {
-    await update($, noRepo, () => ({ cwd, at: now }))
-    await update($, github, () => null)
-    return
-  }
-  if (skip) await update($, noRepo, () => null)
-  const repo = parsed.path
-  let branch = '?'
-  let status = ''
-  let counts = ''
-  let version: string | null = null
-  try {
-    const head = await $.process.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], RUN)
-    branch = okText(head) ?? '?'
-    const changed = await $.process.run(['git', 'status', '--porcelain'], RUN)
-    status = okText(changed) ?? ''
-    const aheadBehind = await $.process.run(['git', 'rev-list', '--left-right', '--count', '@{u}...HEAD'], RUN)
-    counts = okText(aheadBehind) ?? ''
-    const tag = await $.process.run(['git', 'describe', '--tags', '--abbrev=0'], RUN)
-    version = okText(tag)
-  } catch {}
-  const [behind = 0, ahead = 0] = counts.split(/\s+/).map(Number)
-  if (!version) {
-    const pkg = await readJson($, 'package.json', {})
-    version = pkg.version ? `v${pkg.version}` : null
-  }
-  const local = {
-    forge: parsed.forge,
-    repo: clean(repo),
-    branch: clean(branch, 40),
-    dirty: status ? status.split('\n').length : 0,
-    ahead: ahead || 0,
-    behind: behind || 0,
-    version: version ? clean(version, 24) : null,
-  }
-
-  const previous = await read($, github)
-  const fresh = previous?.repo === repo && now - previous.fetchedAt < GITHUB_TTL
-  if (fresh && previous) {
-    const kept: TamaGithub = { ...local, issues: previous.issues, prs: previous.prs, stars: previous.stars, ci: previous.ci, fetchedAt: previous.fetchedAt }
-    await update($, github, () => kept)
-    return
-  }
-  const numbers = await fetchForge($, parsed.forge, parsed.host, repo, branch)
-  const latest: TamaGithub = { ...local, ...numbers, fetchedAt: now }
-  await update($, github, () => latest)
-}
-
-// The forge's numbers for a repository: GitHub's, else GitLab's.
-async function fetchForge($: EngineInterface, forge: string, host: string, path: string, branch: string): Promise<Remote> {
-  if (forge === 'github') {
-    const hub = await fetchGithub($, path, branch)
-    return hub
-  }
-  const lab = await fetchGitlab($, host, path, branch)
-  return lab
-}
-
 // ---- usage ----
 
 async function refreshUsage($: EngineInterface) {
@@ -425,9 +211,7 @@ const CHECKS: Check[] = [
     install: 'https://nodejs.org · brew install node · sudo apt install nodejs · sudo pacman -S nodejs · winget install OpenJS.NodeJS',
     ok: out => Number(out.replace(/^v/, '').split('.')[0]) >= 18,
   },
-  { name: 'git', showVersion: true, required: true, why: 'the repo column', install: 'https://git-scm.com' },
-  { name: 'gh (GitHub CLI), signed in', showVersion: false, required: false, why: 'CI runs, pull requests and private GitHub repos', install: 'https://cli.github.com, then gh auth login' },
-  { name: 'glab (GitLab CLI)', showVersion: true, required: false, why: 'pipelines, merge requests and private GitLab projects', install: 'https://gitlab.com/gitlab-org/cli' },
+  { name: 'git', showVersion: true, required: true, why: 'the status line\'s branch', install: 'https://git-scm.com' },
 ]
 
 type Probe = { found: boolean; version: string }
@@ -440,12 +224,12 @@ function probe(result: RunResult, check: Check): Probe {
   return { found: result.exitCode === 0 && (check.ok ? check.ok(version) : true), version }
 }
 
-// The four programs the doctor checks, each command written out in full; a
+// The two programs the doctor checks, each command written out in full; a
 // program that is not installed rejects and reads as missing.
 async function probeAll($: EngineInterface): Promise<Probe[]> {
-  const [node, git, gh, glab] = CHECKS as [Check, Check, Check, Check]
+  const [node, git] = CHECKS as [Check, Check]
   const DOCTOR = { timeoutMs: 5000 }
-  const found: Probe[] = [MISSING, MISSING, MISSING, MISSING]
+  const found: Probe[] = [MISSING, MISSING]
   try {
     const answer = await $.process.run(['node', '--version'], DOCTOR)
     found[0] = probe(answer, node)
@@ -454,21 +238,12 @@ async function probeAll($: EngineInterface): Promise<Probe[]> {
     const answer = await $.process.run(['git', '--version'], DOCTOR)
     found[1] = probe(answer, git)
   } catch {}
-  try {
-    const answer = await $.process.run(['gh', 'auth', 'status'], DOCTOR)
-    found[2] = probe(answer, gh)
-  } catch {}
-  try {
-    const answer = await $.process.run(['glab', '--version'], DOCTOR)
-    found[3] = probe(answer, glab)
-  } catch {}
   return found
 }
 
-// What the band shows at a width: the scene and caption, then the repo column (idle.tsx WIDTH).
-// scene: 20 pixel columns, a space, the 11-wide effects column and the gap; github: the column and its separator.
+// scene: 20 pixel columns, a space, the 11-wide effects column and the gap.
 // Under `min` columns the band and the spinner become one line.
-const BAND_WIDTH = { min: 44, scene: 34, github: 46 + 3, repo: 34 + 46 + 46 }
+const BAND_WIDTH = { min: 44, scene: 34 }
 
 async function doctorText($: EngineInterface, columns = 80): Promise<string> {
   const lines = ['TamaGoxtix doctor', '']
@@ -480,7 +255,7 @@ async function doctorText($: EngineInterface, columns = 80): Promise<string> {
     if (!found) lines.push(`    needed for ${check.why}${check.required ? '' : ' (optional)'}`, `    install: ${check.install}`)
   }
   const pet = await read($, showPet)
-  const fits = columns >= BAND_WIDTH.repo ? 'scene and repo' : columns >= BAND_WIDTH.min ? `scene only (the repo column needs ${BAND_WIDTH.repo} columns)` : `one line (the scene needs ${BAND_WIDTH.min} columns)`
+  const fits = columns >= BAND_WIDTH.min ? 'the scene' : `one line (the scene needs ${BAND_WIDTH.min} columns)`
   lines.push(
     '',
     pet ? 'Monster band: on (/tamagoxtix pet off hides it)' : '✖ Monster band: hidden by /tamagoxtix pet off (pet on brings it back)',
@@ -608,7 +383,6 @@ async function loadSession($: EngineInterface) {
   const pref = await $.store.get('showPet')
   await update($, showPet, () => pref !== false)
   void refreshUsage($)
-  void refreshGithub($)
 }
 
 // ---- the powerline status line ----
@@ -761,7 +535,7 @@ async function helpSections($: EngineInterface): Promise<HelpSection[]> {
       title: 'usage',
       rows: [
         { command: '/tamagoxtix', does: 'the usage card: today, session, week, limits, charts' },
-        { command: '/tamagoxtix doctor', does: 'check Node.js, git, gh, glab and the font' },
+        { command: '/tamagoxtix doctor', does: 'check Node.js, git and the font' },
       ],
     },
     {
@@ -872,8 +646,7 @@ export const register: Register = on => {
     const now = await $.clock.now()
     await update($, idleSince, () => now)
     void refreshUsage($)
-    void refreshGithub($)
-    return done
+      return done
   })
 
   // ---- rate limits: kept for the pane and written for herdr's popup ----
@@ -909,6 +682,7 @@ export const register: Register = on => {
       startedAt: current?.startedAt ?? now,
       animate: (await readConfig($)).animate !== false,
       columns: e.viewport?.columns ?? 100,
+      status: (await read($, memoryLine)) ?? [],
     }
     const { Client } = $.ui.resolve(e)
     return <Client module="./spinner.tsx" key="tamagoxtix-spinner" props={spinnerProps} />
@@ -934,7 +708,6 @@ export const register: Register = on => {
     const show = await read($, showPet)
     const since = await read($, idleSince)
     const data = await read($, usage)
-    const repo = await read($, github)
     if (!pal || !pet || !show) return next(e)
     const now = await $.clock.now()
     const missingNode = await read($, nodeMissing)
@@ -947,13 +720,11 @@ export const register: Register = on => {
       palette: pal,
       idleSince: since || now,
       todayCount: data?.today.tokens ?? null,
-      github: repo,
       columns: e.props.bodyColumns,
       nodeMissing: missingNode,
       cheering,
       compact: mode === 'compact',
       face,
-      icons: String(config.icons ?? 'nerd'),
       animate: config.animate !== false,
       status: status ?? [],
     }
@@ -970,8 +741,7 @@ export const register: Register = on => {
       )
     }
     const columns = e.props.bodyColumns
-    const showGithub = repo !== null && columns >= BAND_WIDTH.repo
-    const bodyColumns = columns - BAND_WIDTH.scene - (showGithub ? BAND_WIDTH.github : 0)
+    const bodyColumns = columns - BAND_WIDTH.scene
     const others = await next({ ...e, props: { ...e.props, bodyColumns } })
     return (
       <Box flexDirection="column">

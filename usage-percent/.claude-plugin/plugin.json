@@ -1,6 +1,6 @@
 {
   "name": "usage-percent",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "A row under the prompt: context, 5-hour, weekly and model-scoped weekly usage; in Nx repos also memory, the session's nx serve projects and the branch's pipeline",
   "author": {
     "name": "Stephan Schreiber"

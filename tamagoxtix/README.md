@@ -5,8 +5,7 @@ Fabricio Oliveira de Andrade), kept here with the other mods; see [CHANGELOG.md]
 what differs. The herdr plugin is in [herdr-tamagoxtix](../herdr-tamagoxtix/).
 
 A pixel monster in place of Claude Code's spinner: it acts out what Claude is
-doing, hangs out above the prompt between turns next to your
-GitHub or GitLab repo, cheers you on while you type a prompt, and colors everything in one palette.
+doing, hangs out above the prompt between turns, cheers you on while you type a prompt, and colors everything in one palette.
 
 ```sh
 claude plugin install tamagoxtix@schreibse-mods   # or clone, see the repo README
@@ -22,7 +21,7 @@ Screenshots, commands and details: [the main README](https://github.com/fabandra
 
 Everything TamaGoxtix does happens on your machine, in readable source in this
 folder. It sends no analytics and no telemetry, reads no credentials (no
-tokens, keys or passwords: `gh` and `glab` sign in on their own), and never
+tokens, keys or passwords), contacts no host, and never
 takes commands from a server.
 
 ### Programs it runs
@@ -33,41 +32,18 @@ command that comes from the network:
 | Program | When | Why |
 | --- | --- | --- |
 | `node scripts/usage-node.mjs --days 14` (this folder) | at the start of a session and after each turn | to sum token usage from Claude Code's transcripts |
-| `git remote get-url origin`, `git rev-parse --abbrev-ref HEAD`, `git status --porcelain`, `git rev-list --left-right --count @{u}...HEAD`, `git describe --tags --abbrev=0` | at the start of a session and after each turn; outside a repository once per folder every ten minutes | the repo column: remote, branch, changed files, ahead/behind, latest tag |
-| `gh api repos/<owner>/<repo>`, `gh pr list`, `gh run list` | when `gh` is installed and signed in, at most every ten minutes | the repository's issues, pull requests, stars and last CI run |
-| `glab api --hostname <host> projects/<project>…` | when `glab` is installed, at most every ten minutes | the same for GitLab |
 | `herdr pane get <pane>`, `herdr pane report-metadata <pane> --source tamagoxtix --token monster=<icon>`, `herdr plugin action invoke tamagoxtix.sidebar-refresh`, `herdr plugin action invoke tamagoxtix.theme-refresh` | only inside a [herdr](https://herdr.dev) pane (`HERDR_PANE_ID` set) | the monster's identity for the pane, its face in herdr's sidebar, and the herdr plugin's palette |
-| `node --version`, `git --version`, `gh auth status`, `glab --version` | only when you run `/tamagoxtix doctor` | to say what is installed |
+| `node --version`, `git --version` | only when you run `/tamagoxtix doctor` | to say what is installed |
 
-Each command is written out in full at its call in `register.tsx`. The
-owner, repository, branch and host in those arguments come from your project's
-own git remote, cleaned of control characters; `<pane>` is herdr's own pane id.
-
-`gh` and `glab` use the sign-in you gave them yourself (`gh auth login`,
-`glab auth login`). TamaGoxtix never reads, stores or passes on a token, key
-or password, and asks for none: without a signed-in `gh` or `glab` it falls
-back to the public APIs below, which need no credentials.
+Each command is written out in full at its call in `register.tsx`; `<pane>`
+is herdr's own pane id. The status line (only when you turn it on) runs `git`
+itself for the branch.
 
 ### Environment variables it reads
 
 `HOME` (or `USERPROFILE`), `XDG_CONFIG_HOME`, `XDG_STATE_HOME` and
 `CLAUDE_CONFIG_DIR`, to find the folders below, and `HERDR_PANE_ID`, to know
 it runs inside herdr. Nothing else from the environment.
-
-### Hosts it contacts
-
-Only when `gh` or `glab` is missing or not signed in, it asks the public API of
-your project's own forge for the same repository numbers:
-
-- `https://api.github.com/repos/<owner>/<repo>`, for a remote on GitHub (open
-  issues and stars only; pull requests and CI need `gh`)
-- `https://<your GitLab host>/api/v4/projects/<project>` (and its pipelines and
-  merge requests), for a remote on GitLab: gitlab.com or the self-hosted host
-  named in your git remote
-
-What it sends is the request itself: the owner, repository and branch names
-from your git remote. No file contents, no conversation, no token counts, no
-credentials.
 
 ### Files it reads
 
@@ -78,7 +54,6 @@ credentials.
   to change them when you ask (below)
 - the active Omarchy theme's colors (`~/.config/omarchy/current/theme`), only
   with the `omarchy` palette and only where the file exists
-- the project's `package.json`, for its version
 - its own config and state (below)
 
 ### Files it writes
@@ -125,7 +100,7 @@ to give those settings back.
 | Hook | What it does |
 | --- | --- |
 | `session.start`, `session.end` | loads your palette and monster; registers `/tamagoxtix` |
-| `turn.start`, `turn.complete` | starts and stops the spinner's clock; refreshes usage and the repo column |
+| `turn.start`, `turn.complete` | starts and stops the spinner's clock; refreshes usage |
 | `session.measure` | keeps Claude Code's 5-hour and weekly limit readings for the usage card |
 | `prompt.edit` | looks at whether the prompt box holds a prompt, to cheer you on while you type; it passes every edit on unchanged and never keeps or sends the text |
 | `ui.render` (`Spinner`, `AbovePrompt`, `CommandOutput` of `/tamagoxtix`) | draws the monster, the band above the prompt and the cards |

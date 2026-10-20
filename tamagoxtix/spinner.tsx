@@ -7,7 +7,7 @@ import type { ClientElements, ClientModule, ClientSurface } from 'claude-code'
 
 import { scene, workSceneAt } from './lib/scenes.mjs'
 import { slotColor } from './lib/monsters.mjs'
-import type { TamaMonster, TamaPalette } from './types'
+import type { TamaMonster, TamaPalette, TamaStatusPiece } from './types'
 
 type Run = { text: string; fg?: string; bg?: string }
 type SceneData = { rows: Run[][]; fx: string[]; fxSlot: string; caption: string }
@@ -40,6 +40,8 @@ export type SpinnerProps = {
   animate: boolean
   /** The terminal's width: under MIN_WIDTH the spinner is one line. */
   columns: number
+  /** The third line, beside the monster's feet: usage-percent's memory bar. */
+  status: TamaStatusPiece[]
 }
 
 type State = { frame: number }
@@ -138,6 +140,13 @@ const Spinner: ClientModule<SpinnerProps, State> = (props, surface: ClientSurfac
           <Text mono color={palette.cyan}>{time.laps > 0 ? ` ${marks('●', time.laps)}` : ''}</Text>
           <Text mono color={palette.muted}> · esc to interrupt</Text>
         </Text>
+        {props.status.length > 0 && (
+          <Text mono wrap="truncate-end">
+            {props.status.map(piece => (
+              <Text mono color={piece.tone === 'dim' ? palette.muted : palette[piece.tone]}>{piece.text}</Text>
+            ))}
+          </Text>
+        )}
       </Box>
     </Box>
   )

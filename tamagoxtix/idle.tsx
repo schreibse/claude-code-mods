@@ -127,12 +127,12 @@ const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<Stat
           {props.cheering ? (
             <Text mono color={palette.orange}>{CHEERS[Math.floor(now / 10_000) % CHEERS.length]} · enter to send</Text>
           ) : (
-            <Text mono color={palette.muted}>waiting for you · idle {formatIdle(now - props.idleSince)}</Text>
+            <Text mono color={palette.fg}>waiting for you · idle {formatIdle(now - props.idleSince)}</Text>
           )}
           {props.nodeMissing ? (
             <Text mono color={palette.orange}> · install Node.js 18+ to see your usage · /tamagoxtix doctor</Text>
           ) : props.todayCount !== null ? (
-            <Text mono color={palette.muted}>{` · ${formatCount(props.todayCount)} today`}</Text>
+            <Text mono color={palette.fg}>{` · ${formatCount(props.todayCount)} today`}</Text>
           ) : null}
         </Text>
         {props.status.length > 0 && (

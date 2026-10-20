@@ -4,6 +4,10 @@ Forked from [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix
 (commit `7cbd7b2`, MIT, by Fabricio Oliveira de Andrade), synced with 2.1.6 (`dbc8c20`). Upstream's
 own history is in that repo.
 
+## 2.4.2 — 2026-10-19
+
+- The "waiting for you · idle … · N today" line draws in the text colour too, not the muted one.
+
 ## 2.4.1 — 2026-10-19
 
 - The memory line draws in the palette's text colour instead of the muted one, which was barely

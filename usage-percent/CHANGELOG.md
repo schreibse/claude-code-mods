@@ -1,5 +1,9 @@
 # usage-percent changelog
 
+## 0.5.2 — 2026-10-19
+
+- The memory line reads `RAM usage ▰▰▰▱▱▱▱▱▱▱ 3.3G` instead of `mem …`.
+
 ## 0.5.1 — 2026-10-19
 
 - The memory sampler re-arms on the next measure after a hot reload of the skills dir, which re-runs

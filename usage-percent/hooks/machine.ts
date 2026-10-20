@@ -13,9 +13,9 @@ export function memory(current: number, max: number, pressureAvg10: number): Pie
   const figure = `${(current / GIB).toFixed(1)}G`
   const used = Number.isFinite(percent) ? { text: `${bar(percent, MEMORY_CELLS)} ${figure}`, tone: toneOf(percent) } : dim(figure)
   if (pressureAvg10 <= 0) {
-    return [dim('mem '), used]
+    return [dim('RAM usage '), used]
   }
-  return [dim('mem '), used, dim(' · psi '), { text: `${Math.round(pressureAvg10)}%`, tone: toneOf(pressureAvg10, 20, 50) }]
+  return [dim('RAM usage '), used, dim(' · psi '), { text: `${Math.round(pressureAvg10)}%`, tone: toneOf(pressureAvg10, 20, 50) }]
 }
 
 export function pressureAvg10(pressureFile: string): number {

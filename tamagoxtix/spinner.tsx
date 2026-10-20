@@ -143,7 +143,7 @@ const Spinner: ClientModule<SpinnerProps, State> = (props, surface: ClientSurfac
         {props.status.length > 0 && (
           <Text mono wrap="truncate-end">
             {props.status.map(piece => (
-              <Text mono color={piece.tone === 'dim' ? palette.muted : palette[piece.tone]}>{piece.text}</Text>
+              <Text mono color={piece.tone === 'dim' ? palette.fg : palette[piece.tone]}>{piece.text}</Text>
             ))}
           </Text>
         )}

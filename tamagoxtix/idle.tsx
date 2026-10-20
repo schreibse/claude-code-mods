@@ -138,7 +138,7 @@ const Idle: ClientModule<IdleProps, State> = (props, surface: ClientSurface<Stat
         {props.status.length > 0 && (
           <Text mono wrap="truncate-end">
             {props.status.map(piece => (
-              <Text mono color={piece.tone === 'dim' ? palette.muted : palette[piece.tone]}>{piece.text}</Text>
+              <Text mono color={piece.tone === 'dim' ? palette.fg : palette[piece.tone]}>{piece.text}</Text>
             ))}
           </Text>
         )}

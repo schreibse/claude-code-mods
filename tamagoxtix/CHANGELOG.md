@@ -4,6 +4,11 @@ Forked from [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix
 (commit `7cbd7b2`, MIT, by Fabricio Oliveira de Andrade), synced with 2.1.6 (`dbc8c20`). Upstream's
 own history is in that repo.
 
+## 2.4.1 — 2026-10-19
+
+- The memory line draws in the palette's text colour instead of the muted one, which was barely
+  readable; yellow and red warnings keep their colour.
+
 ## 2.4.0 — 2026-10-19
 
 - The memory bar also sits on the spinner's third line while Claude works; before, it showed only

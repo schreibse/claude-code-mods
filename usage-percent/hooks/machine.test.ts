@@ -4,12 +4,12 @@ import { containerOf, directoriesOf, memory, pressureAvg10, servedIn, serveProce
 const text = (pieces: readonly { text: string }[]) => pieces.map(p => p.text).join('')
 
 test('memory shows slice usage, coloured by its share, and pressure only when there is some', () => {
-  expect(text(memory(3583266816, 12884901888, 0))).toBe('RAM usage ▰▰▰▱▱▱▱▱▱▱ 3.3G')
+  expect(text(memory(3583266816, 12884901888, 0))).toBe('RAM ▰▰▰▱▱▱▱▱▱▱ 3.3G')
   expect(memory(3583266816, 12884901888, 0)[1]?.tone).toBe('dim')
   expect(memory(10 * 1024 ** 3, 12884901888, 0)[1]?.tone).toBe('yellow')
-  expect(text(memory(3583266816, 12884901888, 12.4))).toBe('RAM usage ▰▰▰▱▱▱▱▱▱▱ 3.3G · psi 12%')
+  expect(text(memory(3583266816, 12884901888, 12.4))).toBe('RAM ▰▰▰▱▱▱▱▱▱▱ 3.3G · psi 12%')
   expect(memory(3583266816, 12884901888, 61)[3]?.tone).toBe('red')
-  expect(text(memory(3583266816, Number('max'), 0))).toBe('RAM usage 3.3G')
+  expect(text(memory(3583266816, Number('max'), 0))).toBe('RAM 3.3G')
   expect(pressureAvg10('some avg10=7.25 avg60=0.00 avg300=0.00 total=1\nfull avg10=1.00')).toBe(7.25)
   expect(pressureAvg10('')).toBe(0)
 })

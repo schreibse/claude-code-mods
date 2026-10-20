@@ -1,5 +1,9 @@
 # usage-percent changelog
 
+## 0.5.3 — 2026-10-19
+
+- The memory line reads `RAM ▰▰▰▱▱▱▱▱▱▱ 3.3G`, shorter than `RAM usage …`.
+
 ## 0.5.2 — 2026-10-19
 
 - The memory line reads `RAM usage ▰▰▰▱▱▱▱▱▱▱ 3.3G` instead of `mem …`.

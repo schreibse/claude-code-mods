@@ -22,6 +22,8 @@ the prompt and react to tool calls. Built and used on Claude Code 2.1.287+, Linu
 | [tamagoxtix](tamagoxtix/) | Third line beside the monster, idle and while Claude works: usage-percent's memory bar. A fork of [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix) (MIT): a pixel monster in place of the spinner that acts out what Claude does, a band above the prompt between turns, cheer scenes while you type, twelve palettes, an optional powerline status line. The fork drops the band's usage column and repo column (repo-line shows repo and branch), the spinner's token line (usage-percent has the limits), pads the effects column so the text beside the monster stays put, adds `/tamagoxtix animate off` for still scenes, and puts the other mods' bands under the monster's caption instead of replacing them. With quiet-spinner the monster's line shows the plain word when quiet-spinner sits outer in the chain, else the whimsical one. The herdr half is [herdr-tamagoxtix](herdr-tamagoxtix/) (sidebar faces, a usage popup, a tab-bar status area) | `/tamagoxtix help`, `… pet on\|off` hides the band, `… palette <name>`, `… statusline on\|off` (writes `statusLine` into `settings.json`, backup kept), `… theme on\|off`, `… reroll` | Node.js 18+, a Nerd Font (or `/tamagoxtix icons plain`); `git` for the status line |
 | [task-meter](task-meter/) | Band above the prompt with one row per running task: background shells, foreground shells after 5 s, subagents (their shells as `└` child rows, tool count `⚒ N`), workflows, monitors. Per row a ten-cell bar (filled where the output shows `[N/M]`, a percentage or an nx task count, else one cell walking), the process tree's memory (yellow from 2 GB, red from 4 GB) and the running time, in aligned columns. Rows end with the task | – | Linux: `ps`, `/proc/<pid>/fd`, `tail` |
 | [repo-line](repo-line/) | A line right above the prompt: the repository's name as a badge on the repository's own colour (a golden-angle hue per new repository, kept in the store), the branch (`@abc1234` when detached) and `(wt: name)` in a linked worktree, so a prompt does not go to the wrong session. `/repo-line color <hue|#rrggbb>` overrides, `color reset` drops it | `/repo-line` | git |
+| [needs-you](needs-you/) | Asks that wait on you stand out. Adds a system-prompt section: yes/no approvals and choices go through AskUserQuestion; anything else Claude waits on you for goes on its own line `⏸ Needs you: …`. Those lines are drawn bold in the theme's warning colour (as plain text: links and code spans inside them are not formatted), pinned in a band above the prompt until your next message (or **Clear**), and in herdr shown as a `⏸` in the session's sidebar row; a `?` there while an AskUserQuestion picker is open. See [herdr](#herdr-images-and-links) for the sidebar row | – | herdr ≥ 0.9.5 for the sidebar icons, with `{ token = "$ask" }` and `{ token = "$pick" }` in `ui.sidebar.agents.rows` |
+| [ask-guard](ask-guard/) | When a reply asks a yes/no question in prose (`shall I…?`, `want me to…?`, `ok to push…?`, `should I…?` and similar), a Stop hook sends Claude back to ask it with AskUserQuestion, once per reply. Skips code blocks, `>` quotes, quoted text and `⏸ Needs you` lines; a hook that fails lets the reply through | – | – |
 
 The model sees exactly what it would without them: the mods change what is drawn, except
 reminder-log, which drops two kinds of injected reminders, redact, which hides secrets, mem-guard,
@@ -265,6 +267,20 @@ Install:
 ```sh
 herdr plugin link ~/.claude/skills/herdr-link-toast
 ```
+
+### needs-you in the herdr sidebar
+
+needs-you reports two tokens on its own pane (`herdr pane report-metadata`): `$ask` (`⏸`) while a
+`⏸ Needs you` line is open, `$pick` (`?`) while an AskUserQuestion picker is open. herdr draws
+them only where the agent row names them, in `~/.config/herdr/config.toml`:
+
+```toml
+[ui.sidebar.agents]
+rows = [["state_icon", { token = "$ask", fg = "#f5a623", bold = true }, { token = "$pick", fg = "#f5a623", bold = true }, "machine", "workspace", "tab"], ["agent"]]
+```
+
+`fg` takes hex only. The row layout is the client's: after editing, choose **reload config** in
+herdr's menu (`herdr server reload-config` does not reload it).
 
 ### herdr-tamagoxtix (a herdr plugin, not a Claude Code mod)
 

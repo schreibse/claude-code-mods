@@ -1,0 +1,11 @@
+{
+  "name": "ask-guard",
+  "version": "0.1.0",
+  "description": "Sends Claude back when a reply ends on a yes/no question written as prose instead of AskUserQuestion",
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/ask-guard",
+  "repository": "https://github.com/schreibse/claude-code-mods",
+  "license": "MIT"
+}

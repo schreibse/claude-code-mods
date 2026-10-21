@@ -1,0 +1,12 @@
+{
+  "name": "needs-you",
+  "version": "0.1.0",
+  "description": "Lines where Claude waits on you are drawn in colour and pinned in a band above the prompt",
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/needs-you",
+  "repository": "https://github.com/schreibse/claude-code-mods",
+  "types": "./types/index.d.ts",
+  "license": "MIT"
+}

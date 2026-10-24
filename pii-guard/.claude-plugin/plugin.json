@@ -1,0 +1,20 @@
+{
+  "name": "pii-guard",
+  "version": "0.1.0",
+  "description": "Asks before a tool call sends your name or email to a non-local destination",
+  "userConfig": {
+    "identifiers": {
+      "type": "string",
+      "title": "Personal identifiers",
+      "description": "Comma-separated strings (emails, full name) that must not leave the machine unasked; matched case-insensitively",
+      "default": "",
+      "sensitive": false
+    }
+  },
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/pii-guard",
+  "repository": "https://github.com/schreibse/claude-code-mods",
+  "license": "MIT"
+}

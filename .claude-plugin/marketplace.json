@@ -1,6 +1,6 @@
 {
   "name": "schreibse-mods",
-  "description": "Claude Code mods: quieter transcript, usage row, MR cards, CodeRabbit band, secret redaction, memory guard, handover, stack teardown, review walk, pixel monster, highlighted asks, ask guard",
+  "description": "Claude Code mods: quieter transcript, usage row, MR cards, CodeRabbit band, secret redaction, memory guard, handover, stack teardown, review walk, pixel monster, highlighted asks, ask guard, personal-data guard",
   "owner": {
     "name": "Stephan Schreiber"
   },
@@ -68,6 +68,10 @@
     {
       "name": "ask-guard",
       "source": "./ask-guard"
+    },
+    {
+      "name": "pii-guard",
+      "source": "./pii-guard"
     }
   ]
 }

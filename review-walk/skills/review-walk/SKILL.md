@@ -34,6 +34,11 @@ For finding N of M, one `AskUserQuestion` with exactly one question:
 - options, your recommendation first and marked `(Recommended)`, labels starting with the
   decision word: `Fix` (what the fix is, and whether it adds new surface to review again),
   `Issue` (defer to a tracked issue), `Skip` (why it is fine as is).
+- **Once one finding is `Fix`, the push is coming anyway.** For every later finding, "another
+  pipeline" or "review pressure" is no argument: recommend on the finding's own merit. A defect in
+  the MR's own diff (a wrong comment, a missed case, a small duplication) is a `Fix`; `Issue` is for
+  work outside the MR's scope; `Skip` for what is fine as is. A follow-up issue per finding is
+  backlog, not caution.
 
 Wait for the answer before asking the next. A free-text answer is the user's decision in their
 words: follow it. Fix nothing while questions remain.

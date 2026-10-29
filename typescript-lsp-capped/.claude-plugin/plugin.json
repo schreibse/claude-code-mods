@@ -1,0 +1,28 @@
+{
+  "name": "typescript-lsp-capped",
+  "version": "0.1.0",
+  "description": "The official typescript-lsp server with tsserver's V8 heap capped at 1536 MB",
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "license": "MIT",
+  "lspServers": {
+    "typescript": {
+      "command": "typescript-language-server",
+      "args": ["--stdio"],
+      "initializationOptions": {
+        "maxTsServerMemory": 1536
+      },
+      "extensionToLanguage": {
+        ".ts": "typescript",
+        ".tsx": "typescriptreact",
+        ".js": "javascript",
+        ".jsx": "javascriptreact",
+        ".mts": "typescript",
+        ".cts": "typescript",
+        ".mjs": "javascript",
+        ".cjs": "javascript"
+      }
+    }
+  }
+}

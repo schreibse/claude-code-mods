@@ -47,6 +47,11 @@ export function decide(walk: Walk | null, findings: readonly number[], decision:
   return { ...walk, decisions: walk.decisions.map((d, i) => (chosen.has(i) ? decision : d)) }
 }
 
+/** A walk with every finding decided is over: nothing is left to show, closing report or not. */
+export function settled(walk: Walk | null): Walk | null {
+  return walk === null || decided(walk) === walk.findings.length ? null : walk
+}
+
 export function decisionOf(answer: string | undefined): Decision | null {
   const word = answer?.trim().toLowerCase() ?? ''
   if (word === '') {

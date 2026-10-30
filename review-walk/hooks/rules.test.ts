@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { bar, decide, decisionOf, isWalkSkill, positionOf, tally, walkFrom } from './rules'
+import { bar, decide, decisionOf, isWalkSkill, positionOf, settled, tally, walkFrom } from './rules'
 
 const reported = [
   { file: 'src/a.ts', line: 3, summary: 'Null check missing on the parsed id', short_summary: 'Null check missing', failure_scenario: 'x', category: 'correctness' },
@@ -54,4 +54,11 @@ test('decisions recorded without a question count, and only inside the walk', ()
   expect(decide(walk, [3], 'skip')).toBe('Findings are numbered 1 to 2; got 3.')
   expect(decide(walk, [], 'skip')).toBe('Findings are numbered 1 to 2; got none.')
   expect(decide(null, [1], 'fix')).toBe('No review walk is active.')
+})
+
+test('a walk with every finding decided is settled', () => {
+  const walk = walkFrom(reported)!
+  expect(settled({ ...walk, decisions: ['fix', null] })).toEqual({ ...walk, decisions: ['fix', null] })
+  expect(settled({ ...walk, decisions: ['fix', 'skip'] })).toBe(null)
+  expect(settled(null)).toBe(null)
 })

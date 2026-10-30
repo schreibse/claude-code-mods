@@ -1,5 +1,9 @@
 # review-walk changelog
 
+## 0.2.2 — 2026-10-30
+
+- The band ends once every finding is decided, so it no longer stays above the prompt when the closing `ReportFindings` call never comes.
+
 ## 0.2.1 — 2026-10-27
 
 - Once one finding is `Fix`, the push is coming anyway: later recommendations are made on the finding's merit, not on "another pipeline" or review pressure, and an in-diff defect is a `Fix` rather than a follow-up issue.

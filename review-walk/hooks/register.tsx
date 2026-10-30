@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { bar, decide, decided, decisionOf, describe, isWalkSkill, positionOf, tally, walkFrom } from './rules'
+import { bar, decide, decided, decisionOf, describe, isWalkSkill, positionOf, settled, tally, walkFrom } from './rules'
 import type { Decision, Walk } from '../types'
 
 const walk = atom({ plugin: 'review-walk', key: 'walk' } as const, null)
@@ -26,9 +26,16 @@ function progress($: EngineInterface, e: Parameters<EngineInterface['ui']['resol
         <Text dimColor>{` ${done}/${total} decided · ${tally(current)}`}</Text>
       </Box>
       {finding !== null && <Text>{describe(finding)}</Text>}
-      {finding === null && done === total && <Text dimColor>All decided; the closing report ends the walk.</Text>}
     </Box>
   )
+}
+
+async function finish($: EngineInterface, next: Walk) {
+  const remaining = settled(next)
+  if (remaining === null) {
+    armedFor = null
+  }
+  await update($, walk, () => remaining)
 }
 
 export const register: Register = on => {
@@ -85,7 +92,7 @@ export const register: Register = on => {
     if (typeof updated === 'string') {
       return { deny: updated }
     }
-    await update($, walk, () => updated)
+    await finish($, updated)
     return { result: `Recorded ${decision} for finding ${findings.join(', ')}; ${decided(updated)}/${updated.findings.length} decided.` }
   })
 
@@ -99,13 +106,11 @@ export const register: Register = on => {
     const result = await next(e)
     const answers = ((result.result ?? {}) as { answers?: Record<string, string> }).answers ?? {}
     const decision = decisionOf(answers[question.question])
-    await update($, walk, w => {
-      if (w === null) {
-        return w
-      }
-      const decisions = decision === null ? w.decisions : w.decisions.map((d, i) => (i === index ? decision : d))
-      return { ...w, asking: null, decisions }
-    }).catch(() => undefined)
+    const current = await read($, walk).catch(() => null)
+    if (current !== null) {
+      const decisions = decision === null ? current.decisions : current.decisions.map((d, i) => (i === index ? decision : d))
+      await finish($, { ...current, asking: null, decisions }).catch(() => undefined)
+    }
     return result
   })
 

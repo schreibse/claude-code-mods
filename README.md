@@ -16,7 +16,6 @@ the prompt and react to tool calls. Built and used on Claude Code 2.1.287+, Linu
 | [redact](redact/) | Secrets in prompts and tool output reach the model as `‹secret:…›` tokens; only Write/Edit turn them back into the real value. See [redact](#redact-secrets-as-tokens) | – | `betterleaks` on `PATH` |
 | [mem-guard](mem-guard/) | Bash commands that run Node tools go into a memory-capped `claude-cmd.slice` scope. Refused, with the fix in the message: `nx affected`/`run-many` without `--parallel=1`, a pnpm script that has a `:lite` twin, jest without a worker cap (`--maxWorkers=N`, `-w N` or `--runInBand`; a percentage doesn't count), `pkill -f`/`pgrep -f` with an unbracketed pattern, `ci:local`, heavy runs and dev-server starts while the slice is above 75 % or under pressure, a third heavy command or a third dev server at once, and writes by a `check-runner` subagent. See [mem-guard](#mem-guard-memory-rules-for-bash) | – | Linux with systemd: a user `claude-cmd.slice`, `ps`; see [mem-guard](#mem-guard-memory-rules-for-bash) |
 | [handover](handover/) | Skill plus mod: the `handover` skill writes a one-sentence handover for a cold session to `~/.claude/handover.md`; the mod files it per session under `~/.claude/handovers/<session id>.md`, so parallel sessions in one repo never overwrite each other. A band above the prompt shows it; after `/clear` that session's sentence waits in the prompt (Tab takes it) and the next prompt spends it. A new terminal suggests nothing but lists the open sentences of the repo it started in (newest first, 14 days); a sentence belongs to the repo of the file its session wrote last, else to the folder the session started in | `/handover-copy` copies it and hides the band; `/handover` lists, `/handover N` puts one in the prompt, `/handover drop N` removes it; a sentence pasted by hand leaves the list too | – |
-| [herdr-notify](herdr-notify/) | GNOME popup when Claude waits for a permission, an answer or a new prompt (a `Notification` hook, not a plugin). Skipped while that pane is the focused one in herdr. Clicking it raises Ghostty and focuses that session's herdr pane. Hook: `"Notification": [{"matcher": "permission_prompt\|idle_prompt\|elicitation_dialog", "hooks": [{"type": "command", "command": "bash \"$HOME/.claude/skills/herdr-notify/notify.sh\""}]}]` | – | herdr, Ghostty, `notify-send`, `jq` |
 | [stack-down](stack-down/) | On `/clear` and exit (also logout, a finished `-p` run, SIGINT/SIGTERM/SIGHUP), stops what the session left running in its repo: the `nx` processes it started (with their workers), and the repo's Docker Compose projects (`compose down`, volumes kept) unless another Claude session works in the same repo. Only for a session at a repo's top level (`git rev-parse --show-toplevel`); one started above the repos, such as `~/Dev`, stops nothing | – | `docker compose`, `git` |
 | [review-walk](review-walk/) | Skill plus mod: `/review-walk` takes the findings of the reviews already run in the conversation (`/code-review`, a repo's own review skill, CodeRabbit threads, MR comments), merges and ranks them, and asks fix / issue / skip one finding at a time; fixes wait until every finding is decided. The mod puts `Finding N/M`, a progress bar and the decisions so far over each question, and a band above the prompt between them, gone once every finding is decided. Decisions you authorised up front ("apply every Fix") are recorded through its `ReviewWalkDecide` tool instead of a question. The walk starts only after the skill runs, so a review on its own draws no band | `/review-walk` | **A review run first**: it walks findings, it never reviews. Any review skill or source works |
 | [tamagoxtix](tamagoxtix/) | Third line beside the monster, idle and while Claude works: usage-percent's memory bar. A fork of [fabandrade88/tamagoxtix](https://github.com/fabandrade88/tamagoxtix) (MIT): a pixel monster in place of the spinner that acts out what Claude does, a band above the prompt between turns, cheer scenes while you type, twelve palettes, an optional powerline status line. The fork drops the band's usage column and repo column (repo-line shows repo and branch), the spinner's token line (usage-percent has the limits), pads the effects column so the text beside the monster stays put, adds `/tamagoxtix animate off` for still scenes, and puts the other mods' bands under the monster's caption instead of replacing them. With quiet-spinner the monster's line shows the plain word when quiet-spinner sits outer in the chain, else the whimsical one. The herdr half is [herdr-tamagoxtix](herdr-tamagoxtix/) (sidebar faces, a usage popup, a tab-bar status area) | `/tamagoxtix help`, `… pet on\|off` hides the band, `… palette <name>`, `… statusline on\|off` (writes `statusLine` into `settings.json`, backup kept), `… theme on\|off`, `… reroll` | Node.js 18+, a Nerd Font (or `/tamagoxtix icons plain`); `git` for the status line |
@@ -51,7 +50,7 @@ Four mods call out on their own:
 
 ## Install
 
-**From the marketplace** (gets updates; herdr-notify and herdr-link-toast are not in it):
+**From the marketplace** (gets updates; herdr-link-toast is not in it):
 
 ```sh
 claude plugin marketplace add schreibse/claude-code-mods
@@ -314,7 +313,7 @@ say so to the person instead of promising it works.
 
 | Works anywhere | Needs Linux | Never on macOS or Windows |
 |---|---|---|
-| quiet-spinner, reminder-log, mr-banner, coderabbit-band, redact (with `betterleaks`), handover, review-walk, tamagoxtix (Node.js 18+, a Nerd Font); usage-percent's `ctx/5h/wk` and pipeline parts | usage-percent's memory and dev-server parts (cgroup v2, `/proc`, `pwdx`; they stay empty elsewhere); **stack-down** (`ps`, `/proc/<pid>/cwd`, `setsid`); **task-meter** (`ps`, `/proc/<pid>/fd`) | **mem-guard**: it wraps every Node command in `systemd-run`, so without systemd every `node`/`pnpm`/`nx` call fails. Leave it out. herdr-notify, herdr-link-toast: Linux, herdr, Ghostty, GNOME |
+| quiet-spinner, reminder-log, mr-banner, coderabbit-band, redact (with `betterleaks`), handover, review-walk, tamagoxtix (Node.js 18+, a Nerd Font); usage-percent's `ctx/5h/wk` and pipeline parts | usage-percent's memory and dev-server parts (cgroup v2, `/proc`, `pwdx`; they stay empty elsewhere); **stack-down** (`ps`, `/proc/<pid>/cwd`, `setsid`); **task-meter** (`ps`, `/proc/<pid>/fd`) | **mem-guard**: it wraps every Node command in `systemd-run`, so without systemd every `node`/`pnpm`/`nx` call fails. Leave it out. herdr-link-toast: Linux, herdr, GNOME |
 
 - **Windows:** quiet-bash, redact and handover read POSIX paths (`/`, `~`). There, quiet-bash
   thumbnails and redact's Bash pre-scan find nothing, and handover leaves spent files behind.
@@ -333,7 +332,7 @@ the person's copy and test it there. The plugin API has no OS call: on Windows `
 - **quiet-bash, redact** on Windows: path parsing knows `/` and `~` only, not `C:\…`.
 - **usage-percent** on macOS: no `pwdx` (`lsof -a -d cwd -p <pid>` instead); the memory zone needs
   cgroup v2 and stays empty.
-- **herdr-notify, herdr-link-toast**: Linux, herdr and GNOME only; another OS needs its own
+- **herdr-link-toast**: Linux, herdr and GNOME only; another OS needs its own
   notifier, not a port.
 
 Write each OS change as its own commit with a test, so it can come back upstream.
@@ -350,7 +349,6 @@ dev-server rules only work with the real project names: read them from the repo
 | stack-down | another session is a process whose command is `claude` (native install); an npm install runs as `node …/cli.js`, goes unseen, and its repo's Compose stacks go down anyway | `hooks/targets.ts` |
 | mr-banner, coderabbit-band, quiet-bash | the GitLab MCP server named `gitlab` (`mcp__gitlab__…`) | `hooks/*.ts(x)` |
 | coderabbit-band, usage-percent | any remote that isn't GitHub (or Azure) is taken for GitLab | `hooks/register.tsx` |
-| herdr-notify | Ghostty's desktop entry `com.mitchellh.ghostty` | `notify.sh` |
 | tamagoxtix | none: upstream's code, plus the band chaining | – |
 
 **5. Install and check.** Install as above (from a clone when you adapted a mod: an update replaces a marketplace copy), then run `claude plugin validate <mod>` and

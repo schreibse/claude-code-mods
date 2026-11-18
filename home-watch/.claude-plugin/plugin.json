@@ -16,5 +16,6 @@
       "default": "~/Dev",
       "sensitive": false
     }
-  }
+  },
+  "types": "./types/index.d.ts"
 }

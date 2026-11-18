@@ -1,24 +1,9 @@
-type Decision = 'allow' | 'ask' | 'deny'
+import type { PendingCall, Place, Sighting, Tag, Verdict } from '../types'
+
 type Token = { word: string } | { op: string }
 type Heredoc = { delimiter: string; strip: boolean; expands: boolean }
 type Scan = { tokens: Token[]; nested: string[]; end: number }
 type Command = { words: string[]; after: string | undefined }
-
-export type Tag = 'blocked' | 'asked' | 'allowed'
-export type Place = { home: string; root: string; cwd: string; problem: string | null }
-export type Sighting = { tool: string; paths: string[]; label: string }
-export type PendingCall = { id: string; tool: string; input: unknown; agentId?: string }
-export type Verdict = {
-  decision: Decision
-  setting?: string
-  rule?: string
-  hook?: string
-  plugin?: string
-  approver?: 'host' | 'person'
-  dialog?: boolean
-  refused?: boolean
-  didRun?: boolean
-}
 
 export const DEFAULT_ROOT = '~/Dev'
 export const READ_BLOCK = 'permissions.blockReadsOutsideWorkingDirectories'

@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import { READ_BLOCK, expandHome, isUnder, normalize, placeOf, requestedCall, shellWords, sightingOf, tagFor } from './rules'
-import type { Verdict } from './rules'
+import type { Verdict } from '../types'
 
 const HOME = '/home/me'
 const PLACE = placeOf({ home: HOME, root: '~/Dev', cwd: '/home/me/Dev/repo' })

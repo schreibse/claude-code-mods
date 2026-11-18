@@ -1,0 +1,20 @@
+{
+  "name": "home-watch",
+  "version": "0.1.0",
+  "description": "Shows when Claude reaches into ~ outside your work folder: a tag under each such tool call (blocked, asks you, allowed) and a band with the session's tally",
+  "author": {
+    "name": "Stephan Schreiber"
+  },
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/home-watch",
+  "repository": "https://github.com/schreibse/claude-code-mods",
+  "license": "MIT",
+  "userConfig": {
+    "root": {
+      "type": "string",
+      "title": "Work folder",
+      "description": "Paths in your home folder outside this one are watched; ~ is your home",
+      "default": "~/Dev",
+      "sensitive": false
+    }
+  }
+}

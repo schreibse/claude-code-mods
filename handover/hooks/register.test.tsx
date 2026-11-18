@@ -8,9 +8,8 @@ const DAY = 24 * 60 * 60 * 1000
 function home(on: Parameters<TestBody>[1]) {
   const session = { id: 's1', root: '/r/repo' }
   const writes: string[] = []
-  const removed: string[] = []
+  const ran: string[] = []
   const suggested: string[] = []
-  on('env.get', () => ({ value: '/home/me' }) as never)
   on('session.root', () => ({ value: session.root }) as never)
   on('session.id', () => ({ value: session.id }) as never)
   on('tool.call', (_, e) => {
@@ -30,7 +29,7 @@ function home(on: Parameters<TestBody>[1]) {
       const repo = repos.get(argv[2] ?? '')
       return { value: { exitCode: repo === undefined ? 128 : 0, stdout: repo === undefined ? '' : `${repo}\n`, stderr: '' } } as never
     }
-    removed.push(argv.at(-1) ?? '')
+    ran.push(argv.join(' '))
     return { value: { exitCode: 0, stdout: '', stderr: '' } } as never
   })
   const store = new Map<string, unknown>()
@@ -49,20 +48,58 @@ function home(on: Parameters<TestBody>[1]) {
     const { Box } = $.ui.resolve(e)
     return <Box />
   })
-  return { clock: mock.clock(on, { now: 1_000 }), session, writes, removed, suggested, store, repos }
+  return { clock: mock.clock(on, { now: 1_000 }), session, writes, ran, suggested, store, repos }
 }
 
 const band = ($: Parameters<TestBody>[0]) =>
   $.ui.mount({ plugin: 'handover', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false } as never })
 
-test('the sentence goes to a file of the session\'s own and shows in the band', async ($, on) => {
-  const { writes } = home(on)
-  await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/handover.md', content: `${WORK}\n` })
-  expect(writes).toEqual(['/home/me/.claude/handovers/s1.md'])
+const save = ($: Parameters<TestBody>[0], sentence: unknown) =>
+  $.tool.call({ tool: 'mcp__handover__HandoverSave', sentence } as never)
+
+test('session start offers the save and list tools without a ToolSearch', async ($, on) => {
+  home(on)
+  const tools: { name: string; isDeferred?: unknown }[] = []
+  on('tool.register', (_, e) => {
+    tools.push(e as { name: string })
+    return { value: { tool: `mcp__handover__${(e as { name: string }).name}` } } as never
+  })
+  on('command.register', () => ({ value: undefined }) as never)
+  on('session.start', (_, e) => e as never)
+  await $.session.start({ cwd: '/r/repo', surface: null, isInteractive: true } as never)
+  expect(tools.map(t => [t.name, t.isDeferred])).toEqual([['HandoverSave', false], ['HandoverList', undefined]])
+})
+
+test('the list tool gives Claude the band\'s numbering, without reading files', async ($, on) => {
+  const { ran, store } = home(on)
+  const list = () => $.tool.call({ tool: 'mcp__handover__HandoverList' } as never)
+  expect(await list()).toEqual({ result: 'No handover for this repo or folder.' })
+  store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
+  store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
+  store.set('handover:s9', { text: 'elsewhere', at: 900, root: '/r/other' })
+  expect(await list()).toEqual({ result: `1. ${ANALYZE}\n\n2. ${WORK}` })
+  expect(ran).toEqual([])
+})
+
+test('the sentence goes to the session\'s own key, no file, and shows in the band', async ($, on) => {
+  const { writes, ran, store } = home(on)
+  expect(await save($, `${WORK}\n`)).toEqual({ result: 'Handover saved: it shows in the band, and after /clear it waits in the prompt.' })
+  expect(writes).toEqual([])
+  expect(ran).toEqual([])
+  expect((store.get('handover:s1') as { text: string }).text).toBe(WORK)
   expect(await (await band($)).find({ type: 'Text', text: WORK })).toBeDefined()
 })
 
-test('other files pass untouched and leave the band away', async ($, on) => {
+test('an empty or missing sentence is refused and nothing is kept', async ($, on) => {
+  const { store } = home(on)
+  const refusal = { deny: 'HandoverSave takes { sentence: string }, the handover sentence alone.' }
+  expect(await save($, '  \n> ')).toEqual(refusal)
+  expect(await save($, undefined)).toEqual(refusal)
+  expect([...store.keys()]).toEqual([])
+  expect(await (await band($)).find({ type: 'Text', text: WORK })).toBeUndefined()
+})
+
+test('a Write passes through and leaves the band away', async ($, on) => {
   const { writes } = home(on)
   await $.tool.call({ tool: 'Write', file_path: '/r/repo/handover.md', content: WORK })
   expect(writes).toEqual(['/r/repo/handover.md'])
@@ -71,32 +108,31 @@ test('other files pass untouched and leave the band away', async ($, on) => {
 
 test('two sessions in one repo keep a sentence each', async ($, on) => {
   const { session, store } = home(on)
-  await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/handover.md', content: WORK })
+  await save($, WORK)
   session.id = 's2'
-  await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/handover.md', content: ANALYZE })
+  await save($, ANALYZE)
   expect([...store.keys()]).toEqual(['handover:s1', 'handover:s2'])
 })
 
 test('after /clear the session\'s own sentence is proposed, and the first prompt spends it', async ($, on) => {
-  const { clock, session, removed, suggested, store } = home(on)
+  const { clock, session, suggested, store } = home(on)
   on('command.run', { command: 'clear' }, () => {
     session.id = 's3'
     return { text: '' } as never
   })
   store.set('handover:s2', { text: ANALYZE, at: 1_000, root: '/r/repo' })
-  await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/handover.md', content: WORK })
+  await save($, WORK)
   await $.command.run({ command: 'clear', args: '' } as never)
   await clock.advance(1_000)
   expect(suggested).toEqual([WORK, WORK])
   await $.prompt.submit({ text: 'something else' } as never)
   await clock.advance(5_000)
   expect(suggested).toHaveLength(2)
-  expect(removed).toEqual(['/home/me/.claude/handovers/s1.md'])
   expect([...store.keys()]).toEqual(['handover:s2'])
 })
 
 test('a fresh process proposes nothing but lists the repo\'s sentences, newest first', async ($, on) => {
-  const { clock, removed, suggested, store } = home(on)
+  const { clock, suggested, store } = home(on)
   store.set('handover:old', { text: 'old', at: 1_000 - 15 * DAY, root: '/r/repo' })
   store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
   store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
@@ -104,7 +140,6 @@ test('a fresh process proposes nothing but lists the repo\'s sentences, newest f
   await $.classic.SessionStart({ source: 'startup' } as never)
   await clock.advance(5_000)
   expect(suggested).toEqual([])
-  expect(removed).toEqual(['/home/me/.claude/handovers/old.md'])
   const ui = await band($)
   expect(await ui.find({ type: 'Text', text: `1. ${ANALYZE}` })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: `2. ${WORK}` })).toBeDefined()
@@ -112,7 +147,7 @@ test('a fresh process proposes nothing but lists the repo\'s sentences, newest f
 })
 
 test('/handover-pick lists, /handover-pick N proposes that one and the next prompt spends it', async ($, on) => {
-  const { clock, removed, suggested, store } = home(on)
+  const { clock, suggested, store } = home(on)
   store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
   store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
   expect((await $.command.run({ command: 'handover-pick', args: '' } as never)).text).toBe(`1. ${ANALYZE}\n\n2. ${WORK}`)
@@ -120,7 +155,6 @@ test('/handover-pick lists, /handover-pick N proposes that one and the next prom
   await clock.advance(500)
   expect(suggested).toEqual([WORK])
   await $.prompt.submit({ text: WORK } as never)
-  expect(removed).toEqual(['/home/me/.claude/handovers/s1.md'])
   expect([...store.keys()]).toEqual(['handover:s2'])
 })
 
@@ -131,17 +165,11 @@ test('/handover-copy copies the sentence and hides the band', async ($, on) => {
     copied.push((e as { text: string }).text)
     return { value: { isCopied: true } } as never
   })
-  await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/handover.md', content: WORK })
+  await save($, WORK)
   const run = await $.command.run({ command: 'handover-copy', args: '' } as never)
   expect(run.text).toBe('Handover copied.')
   expect(copied).toEqual([WORK])
   expect(await (await band($)).find({ type: 'Text', text: WORK })).toBeUndefined()
-})
-
-test('a literal ~ path still files the sentence per session', async ($, on) => {
-  const { writes } = home(on)
-  await $.tool.call({ tool: 'Write', file_path: '~/.claude/handover.md', content: WORK })
-  expect(writes).toEqual(['/home/me/.claude/handovers/s1.md'])
 })
 
 test('/handover-pick N picks from the list shown, though another session wrote since', async ($, on) => {
@@ -156,21 +184,19 @@ test('/handover-pick N picks from the list shown, though another session wrote s
 })
 
 test('a sentence pasted by hand is spent, in any repo', async ($, on) => {
-  const { removed, store } = home(on)
+  const { store } = home(on)
   store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
   store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/other' })
   await $.prompt.submit({ text: `continue:\n${ANALYZE}` } as never)
-  expect(removed).toEqual(['/home/me/.claude/handovers/s2.md'])
   expect([...store.keys()]).toEqual(['handover:s1'])
 })
 
 test('/handover-pick drop N removes that entry and renumbers the band', async ($, on) => {
-  const { removed, store } = home(on)
+  const { store } = home(on)
   store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
   store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
   await $.classic.SessionStart({ source: 'startup' } as never)
   expect((await $.command.run({ command: 'handover-pick', args: 'drop 1' } as never)).text).toBe('Handover 1 dropped.')
-  expect(removed).toEqual(['/home/me/.claude/handovers/s2.md'])
   expect([...store.keys()]).toEqual(['handover:s1'])
   const ui = await band($)
   expect(await ui.find({ type: 'Text', text: `1. ${WORK}` })).toBeDefined()
@@ -183,14 +209,14 @@ test('a sentence is filed under the repo of the file the session wrote last', as
   const { store, repos } = home(on)
   repos.set('/r/repo/web/.claude/plans', '/r/repo/web')
   await $.tool.call({ tool: 'Edit', file_path: '/r/repo/web/.claude/plans/132.md', old_string: 'a', new_string: 'b' })
-  await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/handover.md', content: WORK })
+  await save($, WORK)
   expect((store.get('handover:s1') as { root: string }).root).toBe('/r/repo/web')
 })
 
 test('outside any repo a sentence stays with the folder the session started in', async ($, on) => {
   const { store } = home(on)
   await $.tool.call({ tool: 'Write', file_path: '/home/me/notes.md', content: 'notes' })
-  await $.tool.call({ tool: 'Write', file_path: '/home/me/.claude/handover.md', content: WORK })
+  await save($, WORK)
   expect((store.get('handover:s1') as { root: string }).root).toBe('/r/repo')
 })
 
@@ -201,4 +227,12 @@ test('a session started inside a repo lists the repo\'s sentences', async ($, on
   store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo/web' })
   store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
   expect((await $.command.run({ command: 'handover-pick', args: '' } as never)).text).toBe(`1. ${WORK}`)
+})
+
+test('while the band shows a list, the list tool keeps its numbering', async ($, on) => {
+  const { store } = home(on)
+  store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
+  await $.classic.SessionStart({ source: 'startup' } as never)
+  store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
+  expect(await $.tool.call({ tool: 'mcp__handover__HandoverList' } as never)).toEqual({ result: `1. ${WORK}` })
 })

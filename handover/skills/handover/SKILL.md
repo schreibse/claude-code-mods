@@ -29,12 +29,12 @@ must keep notifications rows to ids and counts because the owner role reads them
 ## Steps
 
 1. Bring the plan file up to date first: it is what the next session reads.
-2. Write the sentence, and nothing else, with the Write tool to `~/.claude/handover.md` (overwrite
-   it). The handover mod files it under `~/.claude/handovers/<session id>.md`, one per session, so
-   parallel sessions never overwrite each other. It shows a band above the prompt (`/handover-copy`
-   copies it), and after `/clear` this session's sentence waits in the prompt (Tab takes it). A new
-   terminal lists the repo's open sentences instead (the folder's, outside a repo); `/handover-pick N` puts one in the prompt, and
-   `/handover-pick drop N` removes one. A sentence sent in a prompt, by Tab or pasted, leaves the list.
+2. Send the sentence, and nothing else, to the `mcp__handover__HandoverSave` tool (`{ sentence }`);
+   no file is written. The handover mod keeps it per session, so parallel sessions never overwrite
+   each other; a second call replaces this session's sentence. It shows a band above the prompt
+   (`/handover-copy` copies it), and after `/clear` this session's sentence waits in the prompt (Tab
+   takes it). A new terminal lists the repo's open sentences instead (the folder's, outside a repo);
+   `/handover-pick N` puts one in the prompt, and `/handover-pick drop N` removes one. A sentence sent in a prompt, by Tab or pasted, leaves the list.
 3. In chat, show it as a quote under "Handover for a new session:", and again in a fenced code
    block: the band and Tab live only in the terminal, and the block's copy button is how the web and
    phone clients take it. Then say in one line what is left to clean up (a local branch, a
@@ -42,9 +42,7 @@ must keep notifications rows to ids and counts because the owner role reads them
 
 ## "Handover N" from the user
 
-It is line N of the band, which you cannot see. The list is the mod's store
-(`~/.claude/plugins/store/handover_*.json`): the entries whose `root` is this session's place,
-newest first. A sentence's `root` is the git repo of the file the session wrote last (the plan file
+It is line N of the band, which you cannot see. The `mcp__handover__HandoverList` tool returns that
+list, numbered the same way: this session's place, newest first. A sentence's `root` is the git repo of the file the session wrote last (the plan file
 from step 1), else the folder the session started in; a session's place is the repo it started in,
-else that folder. Never answer it from `~/.claude/handovers/`, which holds every repo's files and can
-lag the store. When one turns out to be done, say so and suggest `/handover-pick drop N`.
+else that folder. When one turns out to be done, say so and suggest `/handover-pick drop N`.

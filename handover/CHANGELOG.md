@@ -1,5 +1,12 @@
 # handover changelog
 
+## 2.0.0 — 2026-11-18
+
+- The skill saves the sentence with the mod's own tool, `mcp__handover__HandoverSave`, instead of writing `~/.claude/handover.md`: with `permissions.blockWritesOutsideWorkingDirectories` on, that write was refused and no sentence was kept.
+- "Handover N" is answered with the mod's `mcp__handover__HandoverList` tool, which returns the band's numbered list, instead of reading the store's files under `~/.claude/plugins/store/` (refused under `permissions.blockReadsOutsideWorkingDirectories`).
+- Nothing is written under `~/.claude/handovers/` any more; the sentences live in the mod's store as before. Files left there by earlier versions are not read and can be deleted.
+- **Action needed:** restart every running session after the update; one still holding the old skill text writes `~/.claude/handover.md` and keeps no sentence. That file and `~/.claude/handovers/` can be deleted.
+
 ## 1.0.0 — 2026-11-18
 
 - **Action needed:** the list command is now `/handover-pick` (`/handover-pick N`, `/handover-pick drop N`). Installed from the marketplace, the plugin's own skill holds the name `/handover`, so the engine refused the command and the mod's `session.start` hook failed.

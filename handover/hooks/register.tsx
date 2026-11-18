@@ -1,12 +1,17 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { choicesFor, dirOf, dropIndex, expandHome, handoverPath, isFresh, isPastedIn, sentenceOf, sessionIdOf, sessionPath, storeKey } from './rules'
+import { choicesFor, dirOf, dropIndex, isFresh, isHandoverKey, isPastedIn, sentenceOf, storeKey } from './rules'
 import type { Entry } from './rules'
 import type { Handover } from '../types'
 
 const COPY_COMMAND = 'handover-copy'
 const PICK_COMMAND = 'handover-pick'
+const SAVE_TOOL = 'HandoverSave'
+const SAVE_TOOL_ID = `mcp__handover__${SAVE_TOOL}` as const
+const LIST_TOOL = 'HandoverList'
+const LIST_TOOL_ID = `mcp__handover__${LIST_TOOL}` as const
+const NONE_HERE = 'No handover for this repo or folder.'
 const OFFER_EVERY_MS = 500
 const OFFER_TRIES = 20
 const PREVIEW_CHARS = 160
@@ -21,14 +26,10 @@ let offered: string | null = null
 // The list the band and the last bare /handover-pick numbered, so /handover-pick N picks what was shown.
 let listed: Entry[] = []
 
-async function home($: EngineInterface): Promise<string> {
-  return (await $.env.get('HOME')) ?? ''
-}
-
 async function entries($: EngineInterface): Promise<Entry[]> {
   const found: Entry[] = []
   for (const key of await $.store.keys()) {
-    if (sessionIdOf(key) !== null) {
+    if (isHandoverKey(key)) {
       found.push({ key, handover: (await $.store.get(key)) as Handover })
     }
   }
@@ -37,11 +38,13 @@ async function entries($: EngineInterface): Promise<Entry[]> {
 
 async function remove($: EngineInterface, key: string): Promise<void> {
   await $.store.delete(key).catch(() => undefined)
-  const sessionId = sessionIdOf(key)
-  const dir = await home($)
-  if (sessionId !== null && dir !== '') {
-    await $.process.run(['rm', '-f', sessionPath(dir, sessionId)]).catch(() => undefined)
+}
+
+async function noteEdit<R extends { isError?: boolean }>($: EngineInterface, path: string, result: R): Promise<R> {
+  if (!result.isError) {
+    await update($, lastEdit, () => path)
   }
+  return result
 }
 
 async function repoOf($: EngineInterface, dir: string): Promise<string | null> {
@@ -81,42 +84,36 @@ function suggest($: EngineInterface, key: string, text: string): void {
   })
 }
 
+function numbered(here: readonly Entry[]): string {
+  return here.map((c, i) => `${i + 1}. ${c.handover.text}`).join('\n\n')
+}
+
 function preview(text: string): string {
   return text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS - 1)}…` : text
 }
 
 export const register: Register = on => {
-  // Every session's sentence goes to a file and a key of its own, so parallel sessions never overwrite one another.
-  on('tool.call', { tool: 'Write' }, async ($, e, next) => {
-    const dir = await home($)
-    const sessionId = await $.session.id()
-    const target = sessionPath(dir, sessionId)
-    const path = expandHome(e.file_path, dir)
-    if (dir === '' || (path !== handoverPath(dir) && path !== target)) {
-      const result = await next(e)
-      if (!result.isError) {
-        await update($, lastEdit, () => path)
-      }
-      return result
+  // Every session's sentence goes to a key of its own, so parallel sessions never overwrite one another.
+  on('tool.call', { tool: SAVE_TOOL_ID }, async ($, e) => {
+    const { sentence } = e as unknown as { sentence?: unknown }
+    const text = typeof sentence === 'string' ? sentenceOf(sentence) : ''
+    if (text === '') {
+      return { deny: `${SAVE_TOOL} takes { sentence: string }, the handover sentence alone.` }
     }
-    const result = await next({ ...e, file_path: target })
-    if (result.isError) {
-      return result
-    }
-    const text = sentenceOf(e.content)
     const handover: Handover = { text, at: await $.clock.now(), root: await place($, await read($, lastEdit)) }
-    await $.store.set(storeKey(sessionId), handover)
+    await $.store.set(storeKey(await $.session.id()), handover)
     await update($, pending, () => text)
-    return result
+    return { result: 'Handover saved: it shows in the band, and after /clear it waits in the prompt.' }
   })
 
-  on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
-    const result = await next(e)
-    if (!result.isError) {
-      await update($, lastEdit, () => e.file_path)
-    }
-    return result
+  // While the band shows a list, "handover N" means its line N, though another session wrote since.
+  on('tool.call', { tool: LIST_TOOL_ID }, async $ => {
+    const here = (await read($, choices)) !== null ? listed : await choicesHere($)
+    return { result: here.length === 0 ? NONE_HERE : numbered(here) }
   })
+
+  on('tool.call', { tool: 'Write' }, async ($, e, next) => noteEdit($, e.file_path, await next(e)))
+  on('tool.call', { tool: 'Edit' }, async ($, e, next) => noteEdit($, e.file_path, await next(e)))
 
   // A /clear fires no session.start; the id read before it runs is the session that wrote the sentence.
   on('command.run', { command: 'clear' }, async ($, e, next) => {
@@ -161,6 +158,21 @@ export const register: Register = on => {
   })
 
   on('session.start', async ($, e, next) => {
+    await $.tool.register({
+      name: SAVE_TOOL,
+      description: 'Saves the handover sentence a cold session continues from (the handover skill says when and what). Send the sentence alone.',
+      inputSchema: {
+        type: 'object',
+        properties: { sentence: { type: 'string', minLength: 1 } },
+        required: ['sentence'],
+      },
+      isDeferred: false,
+    })
+    await $.tool.register({
+      name: LIST_TOOL,
+      description: 'Lists the open handover sentences of this repo (or folder, outside a repo), numbered as the band shows them, newest first.',
+      inputSchema: { type: 'object', properties: {} },
+    })
     await $.command.register({ name: COPY_COMMAND, description: 'Copy the handover sentence and hide its band' })
     await $.command.register({ name: PICK_COMMAND, description: 'List the handovers for this repo (or folder, outside a repo); /handover-pick N puts one in the prompt, /handover-pick drop N removes it' })
     return next(e)
@@ -186,7 +198,7 @@ export const register: Register = on => {
     const here = e.args.trim() === '' || listed.length === 0 ? await choicesHere($) : listed
     const chosen = Number.isInteger(n) ? here[n - 1] : undefined
     if (here.length === 0) {
-      return { text: 'No handover for this repo or folder.' }
+      return { text: NONE_HERE }
     }
     if (dropped !== null && chosen !== undefined) {
       await remove($, chosen.key)
@@ -195,7 +207,7 @@ export const register: Register = on => {
     }
     if (chosen === undefined) {
       await update($, choices, shown => (shown === null ? null : here.map(c => c.handover.text)))
-      return { text: here.map((c, i) => `${i + 1}. ${c.handover.text}`).join('\n\n') }
+      return { text: numbered(here) }
     }
     await update($, choices, () => null)
     suggest($, chosen.key, chosen.handover.text)

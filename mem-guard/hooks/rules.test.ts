@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, heavyScopes, invocations, isHeavy, isServe, machineRefusal, nodeScripts, parseMeminfo, parsePressure, refusal, runningRefusal, scoped, segments, serveRefusal, serveScopes, withServeElsewhere } from './rules'
+import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, heavyScopes, invocations, isHeavy, isServe, machineRefusal, nodeScripts, parseMeminfo, parsePressure, refusal, runningRefusal, runsSandboxed, scoped, segments, serveRefusal, serveScopes, withServeElsewhere } from './rules'
 
 const GIB = 1024 ** 3
 const shell = { cwd: '/repo', home: '/home/u' }
@@ -167,6 +167,17 @@ test('node commands are scoped once, leading cds stay outside, everything else i
   for (const command of ['glab mr create --title "Fix jest config"', 'git commit -m "bump node"', 'cd x; git log --grep pnpm']) {
     expect(scoped(command)).toBe(command)
   }
+})
+
+test('a call the sandbox keeps runs sandboxed; leaving it, or no sandbox, does not', () => {
+  expect(runsSandboxed({ enabled: true }, undefined)).toBe(true)
+  expect(runsSandboxed({ enabled: true, autoAllowBashIfSandboxed: true }, false)).toBe(true)
+  expect(runsSandboxed({ enabled: true }, true)).toBe(false)
+  expect(runsSandboxed({ enabled: true, allowUnsandboxedCommands: false }, true)).toBe(true)
+  expect(runsSandboxed({ enabled: false }, undefined)).toBe(false)
+  expect(runsSandboxed({ enabled: 'yes' }, undefined)).toBe(false)
+  expect(runsSandboxed(undefined, undefined)).toBe(false)
+  expect(runsSandboxed(null, undefined)).toBe(false)
 })
 
 test('cgroup files parse; an unlimited or unreadable slice gives no reading', () => {

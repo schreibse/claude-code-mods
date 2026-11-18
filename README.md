@@ -165,7 +165,9 @@ Every Bash command that names a Node tool (`node`, `npx`, `pnpm`, `npm`, `npm ex
 `vitest`, `playwright`, `tsc`, `ngc`) runs as
 `systemd-run --user --scope --slice=claude-cmd.slice -p MemoryMax=30% -p MemorySwapMax=4% -- bash -c '…'`,
 so an overrun dies with exit 137 instead of taking the desktop down. Leading `cd … &&` stay
-outside the wrapper, so the shell's directory still moves.
+outside the wrapper, so the shell's directory still moves. A command that Claude Code's sandbox
+(`sandbox.enabled`) runs is not wrapped: `systemd-run` inside it cannot reach the user bus. It runs
+in the session's own scope, under `claude.slice`'s limits but without the 30 % cap.
 
 The rules read what each part of a command runs (after `&&`, `|`, `;`, `&`, `$( )`, inside
 `bash -c '…'`, following `cd`), never words it only mentions, so a commit message saying

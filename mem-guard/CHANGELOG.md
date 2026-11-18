@@ -1,5 +1,9 @@
 # mem-guard changelog
 
+## 0.5.0 — unreleased
+
+- Under Claude Code's sandbox (`sandbox.enabled`), a command the sandbox runs is no longer wrapped in `systemd-run`: inside the sandbox it cannot reach the user bus, so every Node command failed. A call that leaves the sandbox (`dangerouslyDisableSandbox`, unless `allowUnsandboxedCommands` is `false`) is wrapped as before. The refusals are unchanged.
+
 ## 0.4.0 — 2026-11-12
 
 - Heavy runs and dev servers are also refused when the whole machine is short: under 3G of memory available and under 25% of swap free at once. Docker and the desktop sit outside the claude slices and were not seen.

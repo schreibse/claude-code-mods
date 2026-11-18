@@ -253,6 +253,15 @@ function runsNode({ line, tool }: Invocation): boolean {
   return NODE_TOOLS.includes(program) || NODE_TOOLS.includes(tool)
 }
 
+/** The sandbox wraps a call after this hook, and systemd-run inside it cannot reach the user bus. */
+export function runsSandboxed(sandbox: unknown, disableSandbox: unknown): boolean {
+  if (typeof sandbox !== 'object' || sandbox === null || !('enabled' in sandbox) || sandbox.enabled !== true) {
+    return false
+  }
+  const retryForbidden = 'allowUnsandboxedCommands' in sandbox && sandbox.allowUnsandboxedCommands === false
+  return disableSandbox !== true || retryForbidden
+}
+
 // Leading `cd`s stay outside the wrapper so the shell's working directory still moves.
 export function scoped(command: string): string {
   const cds = /^(?:\s*cd(?:\s+(?:'[^']*'|"[^"]*"|[^\s;&|'"]+))?\s*(?:&&|;))*/.exec(command)?.[0] ?? ''

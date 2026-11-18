@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { checkRunnerRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, invocations, isHeavy, isServe, machineRefusal, nodeScripts, parseMeminfo, parsePressure, refusal, runningRefusal, scoped, withServeElsewhere } from './rules'
+import { checkRunnerRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, invocations, isHeavy, isServe, machineRefusal, nodeScripts, parseMeminfo, parsePressure, refusal, runningRefusal, runsSandboxed, scoped, withServeElsewhere } from './rules'
 import type { Invocation, Pressure, ScriptsByDir } from './rules'
 
 const DOCKER_SLICE = 'docker.slice'
@@ -104,6 +104,7 @@ export const register: Register = on => {
         return { deny: `mem-guard: ${withServeElsewhere(calls, busyRefusal)}` }
       }
     }
-    return next({ ...e, command: scoped(e.command) })
+    const sandbox = await $.settings.read({ key: 'sandbox' }).catch(() => undefined)
+    return runsSandboxed(sandbox, e.dangerouslyDisableSandbox) ? next(e) : next({ ...e, command: scoped(e.command) })
   })
 }

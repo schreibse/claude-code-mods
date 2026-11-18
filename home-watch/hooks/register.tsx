@@ -1,8 +1,10 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Hook, Register } from 'claude-code'
 
 import { DEFAULT_ROOT, READ_BLOCK, placeOf, requestedCall, sightingOf, tagFor } from './rules'
 import type { Place, Tag, Verdict, Watched } from '../types'
+
+type Render = Parameters<Hook<'ui.render'>>[1]
 
 const calls = atom({ plugin: 'home-watch', key: 'calls' } as const, {})
 const pending = atom({ plugin: 'home-watch', key: 'pending' } as const, [])
@@ -34,6 +36,16 @@ async function settle($: EngineInterface, id: string, change: Partial<Verdict>):
   if (tag !== null && tag !== watched.tag) {
     await update($, last, () => ({ label: watched.sighting.label, tag }))
   }
+}
+
+function tagLine($: EngineInterface, e: Render, tag: Tag, label: string, isRunning: boolean) {
+  const { Box, Text } = $.ui.resolve(e)
+  return (
+    <Box paddingLeft={2}>
+      <Text color={TAG_COLOR[tag]} dimColor={tag === 'allowed'}>{`⌂ ${TAG_TEXT[tag](isRunning)}`}</Text>
+      <Text dimColor>{` ${label}`}</Text>
+    </Box>
+  )
 }
 
 async function forget($: EngineInterface, id: string): Promise<void> {
@@ -121,15 +133,31 @@ export const register: Register = (on, options) => {
     if (watched?.tag === undefined || watched.tag === null) {
       return row
     }
-    const { Box, Text } = $.ui.resolve(e)
-    const tag = watched.tag
+    const { Box } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
         {row}
-        <Box paddingLeft={2}>
-          <Text color={TAG_COLOR[tag]} dimColor={tag === 'allowed'} bold={tag !== 'allowed'}>{`⌂ ${TAG_TEXT[tag](e.props.isRunning)}`}</Text>
-          <Text dimColor>{` ${watched.sighting.label}`}</Text>
-        </Box>
+        {tagLine($, e, watched.tag, watched.sighting.label, e.props.isRunning)}
+      </Box>
+    )
+  })
+
+  // An unfolded group draws its calls as ToolUse rows, which carry their own tags.
+  on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
+    const all = await read($, calls)
+    const group = await next(e)
+    const tagged = e.props.calls.flatMap(call => {
+      const watched = call.tool_use_id === undefined ? undefined : all[call.tool_use_id]
+      return watched?.tag ? [{ tag: watched.tag, label: watched.sighting.label, isRunning: call.isRunning }] : []
+    })
+    if (tagged.length === 0 || e.props.isExpanded) {
+      return group
+    }
+    const { Box } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="column">
+        {group}
+        {tagged.map(({ tag, label, isRunning }) => tagLine($, e, tag, label, isRunning))}
       </Box>
     )
   })

@@ -1,6 +1,6 @@
 # mem-guard changelog
 
-## 0.5.0 — unreleased
+## 0.5.0 — 2026-11-18
 
 - Under Claude Code's sandbox (`sandbox.enabled`), a command the sandbox runs is no longer wrapped in `systemd-run`: inside the sandbox it cannot reach the user bus, so every Node command failed. A call that leaves the sandbox (`dangerouslyDisableSandbox`, unless `allowUnsandboxedCommands` is `false`) is wrapped as before. The refusals are unchanged.
 - Not wrapped either, though they run outside the sandbox: a command in `sandbox.excludedCommands`, and every command while the sandbox is enabled but cannot start. Both count once per session, not per command.

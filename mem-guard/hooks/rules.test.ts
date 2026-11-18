@@ -145,9 +145,9 @@ test('the machine refuses only when memory and swap are short together', () => {
 })
 
 test('a Node tool started by systemd-run outside the claude slices is refused', () => {
-  expect(escapeRefusal('systemd-run --user --unit=admin-serve npx nx serve ec-admin')).toContain('--slice=claude.slice')
+  expect(escapeRefusal('systemd-run --user --unit=admin-serve npx nx serve web')).toContain('--slice=claude.slice')
   expect(escapeRefusal("cd /repo && systemd-run --user --scope -p MemoryMax=12G bash -c 'pnpm run build'")).toContain('outside the memory budget')
-  expect(escapeRefusal('systemd-run --user --unit=admin-serve --slice=claude.slice npx nx serve ec-admin')).toBeNull()
+  expect(escapeRefusal('systemd-run --user --unit=admin-serve --slice=claude.slice npx nx serve web')).toBeNull()
   expect(escapeRefusal("systemd-run --user --scope -q --slice=claude-cmd.slice -- bash -c 'npx nx build api'")).toBeNull()
   expect(escapeRefusal('systemd-run --user --scope -q sleep 5')).toBeNull()
   expect(escapeRefusal('git commit -m "systemd-run npx"')).toBeNull()
@@ -187,9 +187,8 @@ test('cgroup files parse; an unlimited or unreadable slice gives no reading', ()
 })
 
 const user = '0::/user.slice/user-1000.slice/user@1000.service'
-const slice = `${user}/claude.slice/claude-cmd.slice`
-const ps = (rows: ReadonlyArray<readonly [string, string]>) => rows.map(([scope, args], i) => ` ${100 + i}     1 ${slice}/${scope}   ${args}`).join('\n')
 const row = (pid: number, ppid: number, cgroup: string, args: string) => ` ${pid} ${ppid} ${user}/${cgroup}   ${args}`
+const ps = (rows: ReadonlyArray<readonly [string, string]>) => rows.map(([scope, args], i) => row(100 + i, 1, `claude.slice/claude-cmd.slice/${scope}`, args)).join('\n')
 
 test('heavy runs: test runners, builds and nx tasks count once per scope; the daemon and a dev server do not', () => {
   expect(heavyRuns(ps([
@@ -202,7 +201,7 @@ test('heavy runs: test runners, builds and nx tasks count once per scope; the da
     ['run-p3.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'],
     ['run-p4.scope', '/usr/bin/node-24 /repo/node_modules/playwright/lib/common/process.js'],
   ]))).toBe(2)
-  expect(heavyRuns(row(9, 1, 'app.slice/ec-admin-serve.service', 'node nx/dist/bin/run-executor.js'))).toBe(0)
+  expect(heavyRuns(row(9, 1, 'app.slice/web-serve.service', 'node nx/dist/bin/run-executor.js'))).toBe(0)
   expect(heavyRuns(row(9, 1, 'claude.slice/run-p9.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js -i'))).toBe(1)
   expect(heavyRuns('')).toBe(0)
   expect(heavyRuns(ps([
@@ -217,14 +216,14 @@ test('dev servers are counted per scope, apart from heavy commands', () => {
   expect(serveRuns(ps([
     ['run-p1.scope', 'node /home/u/.npm-global/bin/pnpm nx serve api'],
     ['run-p1.scope', 'node /repo/node_modules/nx/dist/bin/run-executor.js'],
-    ['run-p2.scope', 'bash -c cd /repo && pnpm nx serve members > /tmp/x/members.log 2>&1'],
+    ['run-p2.scope', 'bash -c cd /repo && pnpm nx serve shop > /tmp/x/shop.log 2>&1'],
     ['run-p3.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'],
   ]))).toBe(2)
-  expect(serveRuns(row(9, 1, 'claude.slice/ec-admin-serve.service', 'npm exec nx serve ec-admin'))).toBe(1)
+  expect(serveRuns(row(9, 1, 'claude.slice/web-serve.service', 'npm exec nx serve web'))).toBe(1)
   expect(serveRuns('')).toBe(0)
 })
 
-test('sandboxed commands in one session scope count once per sandbox', () => {
+test('sandboxed commands in one session scope count once per sandbox; a bwrap above the session is ignored and a ppid cycle ends', () => {
   const session = 'claude.slice/run-p10.scope'
   const sandboxed = (outer: number, args: string) => [
     row(outer, 10, session, 'bwrap --new-session --die-with-parent --unshare-net'),
@@ -232,10 +231,13 @@ test('sandboxed commands in one session scope count once per sandbox', () => {
     row(outer + 2, outer + 1, session, '/bin/bash -c exec 3<&- || exit 12'),
     row(outer + 3, outer + 2, session, args),
   ]
-  const claude = row(10, 1, session, 'claude')
+  const terminal = row(5, 1, 'app.slice/app-flatpak-terminal.scope', 'bwrap --args 42 terminal')
+  const claude = row(10, 5, session, 'claude')
   const jest = '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'
-  const twoJests = [claude, ...sandboxed(20, jest), ...sandboxed(30, jest)].join('\n')
+  const twoJests = [terminal, claude, ...sandboxed(20, jest), ...sandboxed(30, jest)].join('\n')
   expect(heavyRuns(twoJests)).toBe(2)
+  expect(heavyRuns([claude, ...sandboxed(20, jest), row(40, 10, session, jest)].join('\n'))).toBe(2)
+  expect(heavyRuns([row(50, 51, session, 'bwrap --new-session'), row(51, 50, session, jest)].join('\n'))).toBe(1)
   expect(runningRefusal(invocations('npx nx build api', shell), twoJests)).toContain('2 heavy commands')
   const serveAndJest = [claude, ...sandboxed(20, 'node /repo/node_modules/.bin/nx serve api'), ...sandboxed(30, jest)].join('\n')
   expect(serveRuns(serveAndJest)).toBe(1)
@@ -246,7 +248,7 @@ test('sandboxed commands in one session scope count once per sandbox', () => {
 test('a third dev server is refused; serving is recognised however it is spelled', () => {
   const serve = (command: string) => isServe(invocations(command, shell))
   expect(serve('pnpm nx serve admin')).toBe(true)
-  expect(serve('cd /repo && npx nx run members:serve:development > /tmp/log 2>&1')).toBe(true)
+  expect(serve('cd /repo && npx nx run shop:serve:development > /tmp/log 2>&1')).toBe(true)
   expect(serve('pnpm run serve')).toBe(true)
   expect(serve('pnpm nx build admin')).toBe(false)
   expect(serveRefusal(1)).toBeNull()
@@ -258,15 +260,15 @@ test('a third dev server is refused; serving is recognised however it is spelled
   expect(runningRefusal(invocations('pnpm nx serve api', shell), twoJests)).toContain('2 heavy commands')
   expect(runningRefusal(invocations('npx nx build api', shell), twoJests)).toContain('2 heavy commands')
   const serveAndJest = `${ps([['run-p1.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand']])}
-${row(9, 1, 'claude.slice/ec-admin-serve.service', 'npm exec nx serve ec-admin')}`
+${row(9, 1, 'claude.slice/web-serve.service', 'npm exec nx serve web')}`
   expect(runningRefusal(invocations('npx nx run ui:test --runInBand', shell), serveAndJest)).toContain('dev servers included')
   expect(runningRefusal(invocations('npx nx run ui:test --runInBand', shell), ps([['run-p1.scope', 'node /repo/node_modules/jest/bin/jest.js -i']]))).toBeNull()
 })
 
 test('a refused dev server start points at the user\'s own terminal; any other refusal does not', () => {
-  expect(withServeElsewhere(invocations('npx nx serve ec-admin', shell), 'full.')).toBe('full. Or ask the user to serve the app in their own terminal (app.slice, outside this budget).')
+  expect(withServeElsewhere(invocations('npx nx serve web', shell), 'full.')).toBe('full. Or ask the user to serve the app in their own terminal (app.slice, outside this budget).')
   expect(withServeElsewhere(invocations('pnpm run serve:admin', shell), 'full.')).toContain('own terminal')
-  expect(withServeElsewhere(invocations('npx nx run ec-admin:test --maxWorkers=2', shell), 'full.')).toBe('full.')
+  expect(withServeElsewhere(invocations('npx nx run web:test --maxWorkers=2', shell), 'full.')).toBe('full.')
 })
 
 test('a third heavy command waits, with the count', () => {
@@ -281,7 +283,7 @@ test('a check-runner may run checks and log to /tmp, nothing that changes files,
     'pnpm run lint:affected:lite',
     'npx playwright test record-modal --config apps/x/playwright.config.ts --reporter=line',
     'grep -q "^EXIT=" /tmp/x/log',
-    'journalctl --user -u ec-admin-serve --since "-2min" --no-pager | tail -3',
+    'journalctl --user -u web-serve --since "-2min" --no-pager | tail -3',
     'git status --short',
     'git diff --stat',
     'rm -f /tmp/x/log',
@@ -298,8 +300,8 @@ test('a check-runner may run checks and log to /tmp, nothing that changes files,
     ["sed -i 's/a/b/' libs/a.ts", 'in place'],
     ['npx prettier --write libs/a.ts', 'rewrites'],
     ['npx eslint --fix libs/a.ts', 'rewrites'],
-    ['systemctl --user stop ec-admin-serve', 'server'],
-    ['docker restart ec-api', 'server'],
+    ['systemctl --user stop web-serve', 'server'],
+    ['docker restart api', 'server'],
     ['kill 1234', 'server'],
     ['echo x > libs/a.ts', 'outside /tmp'],
     ['cat a | tee libs/a.ts', 'outside /tmp'],

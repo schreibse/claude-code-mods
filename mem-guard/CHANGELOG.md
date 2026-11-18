@@ -3,7 +3,7 @@
 ## 0.5.0 — unreleased
 
 - Under Claude Code's sandbox (`sandbox.enabled`), a command the sandbox runs is no longer wrapped in `systemd-run`: inside the sandbox it cannot reach the user bus, so every Node command failed. A call that leaves the sandbox (`dangerouslyDisableSandbox`, unless `allowUnsandboxedCommands` is `false`) is wrapped as before. The refusals are unchanged.
-- Not wrapped either, though they run outside the sandbox: a command in `sandbox.excludedCommands`, and every command while the sandbox is enabled but cannot start.
+- Not wrapped either, though they run outside the sandbox: a command in `sandbox.excludedCommands`, and every command while the sandbox is enabled but cannot start. Both count once per session, not per command.
 - Sandboxed commands share their session's scope, so heavy commands and dev servers are now counted per sandbox there, not once per scope.
 
 ## 0.4.0 — 2026-11-12

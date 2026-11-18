@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { checkRunnerRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, invocations, isHeavy, isServe, machineRefusal, nodeScripts, parseMeminfo, parsePressure, refusal, runningRefusal, runsSandboxed, scoped, withServeElsewhere } from './rules'
+import { checkRunnerRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, invocations, isHeavy, isServe, machineRefusal, nodeScripts, parseMeminfo, parsePressure, PS_COMMAND, refusal, runningRefusal, runsSandboxed, scoped, withServeElsewhere } from './rules'
 import type { Invocation, Pressure, ScriptsByDir } from './rules'
 
 const DOCKER_SLICE = 'docker.slice'
@@ -98,17 +98,17 @@ export const register: Register = on => {
       if (crowded !== null) {
         return { deny: `mem-guard: ${withServeElsewhere(calls, crowded)}` }
       }
-      const ps = await $.process.run(['ps', '-eo', 'pid=,ppid=,cgroup:250=,args=', '--cols', '600']).catch(() => null)
+      const ps = await $.process.run(PS_COMMAND).catch(() => null)
       const busyRefusal = ps?.exitCode === 0 ? runningRefusal(calls, ps.stdout) : null
       if (busyRefusal !== null) {
         return { deny: `mem-guard: ${withServeElsewhere(calls, busyRefusal)}` }
       }
     }
-    const wrapped = scoped(e.command)
-    if (wrapped === e.command) {
+    const scopedCommand = scoped(e.command)
+    if (scopedCommand === e.command) {
       return next(e)
     }
     const sandbox = await $.settings.read({ key: 'sandbox' }).catch(() => undefined)
-    return runsSandboxed(sandbox, e.dangerouslyDisableSandbox) ? next(e) : next({ ...e, command: wrapped })
+    return runsSandboxed(sandbox, e.dangerouslyDisableSandbox) ? next(e) : next({ ...e, command: scopedCommand })
   })
 }

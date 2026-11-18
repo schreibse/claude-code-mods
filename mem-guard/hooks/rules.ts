@@ -287,7 +287,10 @@ const HEAVY_PROCESS =
   /\/jest(?:-cli)?\/bin\/|jest-worker\/build\/workers|\/vitest\/|playwright\/(?:cli\.js|lib\/common\/process)|\/ms-playwright\/|playwright_\w+dev_profile-|\/typescript\/(?:bin|lib)\/tsc\b|\/compiler-cli\/bundles\/src\/bin\/ngc|nx\/dist\/bin\/run-executor\.js/
 const SERVE = /\bnx(?:\.js)?\s+serve\b|:serve(?::\S+)?(?:\s|$)/
 
-const SANDBOX = /^(?:\S*\/)?bwrap\s/
+const BWRAP = /^(?:\S*\/)?bwrap\s/
+
+/** What `runsOf` reads: every process with its parent, cgroup and command line. */
+export const PS_COMMAND = ['ps', '-eo', 'pid=,ppid=,cgroup:250=,args=', '--cols', '600']
 
 interface Process {
   readonly ppid: string
@@ -295,21 +298,30 @@ interface Process {
   readonly args: string
 }
 
-/** The topmost bwrap above a process: one sandboxed command runs under an outer and an inner one. */
-function outermostSandbox(processes: ReadonlyMap<string, Process>, start: string): string | null {
-  let sandbox: string | null = null
+/** The topmost bwrap above a process within its own unit: one sandboxed command runs under an outer and an inner one. */
+function outermostBwrap(processes: ReadonlyMap<string, Process>, start: string): string | null {
+  const unit = processes.get(start)?.unit
+  let bwrap: string | null = null
   const seen = new Set<string>()
   for (let pid: string | undefined = start; pid !== undefined && !seen.has(pid); pid = processes.get(pid)?.ppid) {
+    const ancestor = processes.get(pid)
+    if (ancestor === undefined || ancestor.unit !== unit) {
+      break
+    }
     seen.add(pid)
-    if (SANDBOX.test(processes.get(pid)?.args ?? '')) {
-      sandbox = pid
+    if (BWRAP.test(ancestor.args)) {
+      bwrap = pid
     }
   }
-  return sandbox
+  return bwrap
+}
+
+function runKey(unit: string, bwrap: string | null): string {
+  return `${unit} ${bwrap ?? ''}`
 }
 
 /**
- * The commands running in claude.slice, claude-cmd.slice included, each with its processes' args, from `ps -eo pid=,ppid=,cgroup=,args=`.
+ * The commands running in claude.slice, claude-cmd.slice included, each with its processes' args, from `PS_COMMAND`.
  * A scope or service is one command, except that every sandboxed command shares its session's scope, so each sandbox counts on its own.
  */
 function runsOf(ps: string): string[][] {
@@ -324,7 +336,7 @@ function runsOf(ps: string): string[][] {
   const runs = new Map<string, string[]>()
   for (const [pid, { unit, args }] of processes) {
     if (unit !== null) {
-      const run = `${unit} ${outermostSandbox(processes, pid) ?? ''}`
+      const run = runKey(unit, outermostBwrap(processes, pid))
       runs.set(run, [...(runs.get(run) ?? []), args])
     }
   }

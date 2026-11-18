@@ -110,6 +110,13 @@ test('relative paths follow the cd a command starts with', () => {
   expect(commandDir('cd && ls', '/r', '/home/me')).toBe('/home/me')
 })
 
+test('quotes keep $HOME and ~ as the shell does', () => {
+  expect(commandDir("cd '$HOME/x' && ls", '/r', '/home/me')).toBe('/r/$HOME/x')
+  expect(commandDir('cd "$HOME/x" && ls', '/r', '/home/me')).toBe('/home/me/x')
+  expect(commandDir('cd "~/x" && ls', '/r', '/home/me')).toBe('/r/~/x')
+  expect(commandDir("cd '~' && ls", '/r', '/home/me')).toBe('/r/~')
+})
+
 test('sent files resolve against the session cwd and home', () => {
   expect(resolvePath('shot.png', '/r', '/home/me')).toBe('/r/shot.png')
   expect(resolvePath('~/a/../shot.png', '/r', '/home/me')).toBe('/home/me/shot.png')

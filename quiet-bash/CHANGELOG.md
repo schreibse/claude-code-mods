@@ -1,5 +1,9 @@
 # quiet-bash changelog
 
+## 0.1.2 — 2026-11-18
+
+- A quoted `cd` target is read as the shell reads it: `cd '$HOME/x'` and `cd "~/x"` stay literal, `cd "$HOME/x"` expands.
+
 ## 0.1.1 — 2026-10-08
 
 - Relative and `~` paths in SendUserFile and `/thumb` resolve against the session's directory; `/thumb` prints `thumb #N: <path>` and each run keeps its own image.

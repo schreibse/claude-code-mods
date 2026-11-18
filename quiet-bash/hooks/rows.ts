@@ -158,17 +158,19 @@ export function isOversized(info: ShotInfo): boolean {
 const PNG_PATHS = /(?<![^\s"'`()<>[\]{},;=])[^\s"'`()<>[\]{},;:\\]+\.png(?![\w/-]|\.\w)/gi
 const LEADING_CD = /^\s*cd(?:\s+("[^"]*"|'[^']*'|[^\s&]+))?\s*&&/
 
-function expandHome(word: string): string {
-  return word.replace(/^\$(?:HOME|\{HOME\})(?=\/|$)/, '~')
-}
-
-function absolute(path: string, dir: string, home: string): string {
-  return path.startsWith('/') ? path : path === '~' || path.startsWith('~/') ? `${home}${path.slice(1)}` : `${dir}/${path}`
+// The shell expands `$HOME` outside '…' and `~` only unquoted.
+function absolute(target: string, dir: string, home: string): string {
+  const [, quote, word = target] = /^(['"])(.*)\1$/.exec(target) ?? []
+  const path = quote === "'" ? word : word.replace(/^\$(?:HOME|\{HOME\})(?=\/|$)/, home)
+  if (path.startsWith('/')) {
+    return path
+  }
+  return quote === undefined && (path === '~' || path.startsWith('~/')) ? `${home}${path.slice(1)}` : `${dir}/${path}`
 }
 
 export function resolvePath(target: string, dir: string, home: string): string {
   const parts: string[] = []
-  for (const part of absolute(expandHome(target.replace(/^(['"])(.*)\1$/, '$2')), dir, home).split('/')) {
+  for (const part of absolute(target, dir, home).split('/')) {
     if (part === '..') {
       parts.pop()
     } else if (part !== '' && part !== '.') {

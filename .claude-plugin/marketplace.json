@@ -76,6 +76,10 @@
     {
       "name": "typescript-lsp-capped",
       "source": "./typescript-lsp-capped"
+    },
+    {
+      "name": "home-watch",
+      "source": "./home-watch"
     }
   ]
 }

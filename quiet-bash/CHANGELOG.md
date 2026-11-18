@@ -1,5 +1,9 @@
 # quiet-bash changelog
 
+## 0.1.3 — 2026-11-18
+
+- A row or group that [home-watch](https://github.com/schreibse/claude-code-mods/tree/main/home-watch) tagged is handed to the mods beneath instead of hidden, so its tag shows. Without home-watch nothing changes.
+
 ## 0.1.2 — 2026-11-18
 
 - A quoted `cd` target is read as the shell reads it: `cd '$HOME/x'` and `cd "~/x"` stay literal, `cd "$HOME/x"` expands.

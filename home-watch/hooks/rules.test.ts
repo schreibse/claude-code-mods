@@ -1,11 +1,11 @@
 import { test, expect } from 'claude-code/testing'
-import { READ_BLOCK, expandHome, isSameCall, isUnder, normalize, placeOf, see, shellWords, tagFor } from './rules'
+import { READ_BLOCK, expandHome, isUnder, normalize, placeOf, requestedCall, shellWords, sightingOf, tagFor } from './rules'
 import type { Verdict } from './rules'
 
 const HOME = '/home/me'
 const PLACE = placeOf({ home: HOME, root: '~/Dev', cwd: '/home/me/Dev/repo' })
 const IN_DEV = placeOf({ home: HOME, root: '~/Dev', cwd: '/home/me/Dev' })
-const paths = (tool: string, input: unknown, place = PLACE) => see(tool, input, place).paths
+const paths = (tool: string, input: unknown, place = PLACE) => sightingOf(tool, input, place).paths
 const bash = (command: string, place = PLACE) => paths('Bash', { command }, place)
 
 test('~ and $HOME expand only at the start of a path', () => {
@@ -30,17 +30,24 @@ test('isUnder matches whole segments', () => {
 })
 
 test('the place: home normalized once, a relative root under ~, an absolute one kept', () => {
-  expect(placeOf({ home: '/home/me/', root: 'Dev', cwd: '/x/' })).toEqual({ home: HOME, root: '/home/me/Dev', cwd: '/x', ignoredRoot: null })
+  expect(placeOf({ home: '/home/me/', root: 'Dev', cwd: '/x/' })).toEqual({ home: HOME, root: '/home/me/Dev', cwd: '/x', problem: null })
   expect(placeOf({ home: HOME, root: '/srv/work', cwd: '/x' }).root).toBe('/srv/work')
-  expect(see('Read', { file_path: '/home/me/.ssh/id' }, placeOf({ home: '/home/me/', root: 'Dev', cwd: '/x' })).label).toBe('~/.ssh/id')
+  expect(sightingOf('Read', { file_path: '/home/me/.ssh/id' }, placeOf({ home: '/home/me/', root: 'Dev', cwd: '/x' })).label).toBe('~/.ssh/id')
 })
 
 test('a root that is empty, home or above it falls back to the default and is reported', () => {
   for (const root of ['', '  ', '~', '/', '/home']) {
     const place = placeOf({ home: HOME, root, cwd: '/x' })
     expect(place.root).toBe('/home/me/Dev')
-    expect(place.ignoredRoot).toBe(root)
+    expect(place.problem).toBe(`root "${root}" ignored, using ~/Dev`)
   }
+})
+
+test('an empty HOME watches nothing and says so', () => {
+  const place = placeOf({ home: '', root: '~/Dev', cwd: '/x' })
+  expect(place.problem).toBe('HOME is not set: nothing is watched')
+  expect(paths('Read', { file_path: '/etc/hosts' }, place)).toEqual([])
+  expect(paths('Bash', { command: 'cat /etc/hosts' }, place)).toEqual([])
 })
 
 test('the splitter honours quotes, escapes and operators', () => {
@@ -57,11 +64,25 @@ test('inside double quotes a backslash escapes only $ ` " \\ and newline', () =>
   expect(bash('cat "/home/me/a\\b"')).toEqual(['/home/me/a\\b'])
 })
 
-test('comments and heredoc bodies are not commands', () => {
+test('comments, heredoc bodies and ((…)) are not commands', () => {
   expect(bash("echo hi # don't\ncat ~/.ssh/id")).toEqual(['/home/me/.ssh/id'])
   expect(bash("cat <<'EOF' > /tmp/s.sh\nrm -rf /home/me/.cache\nEOF\ncat ~/.npmrc")).toEqual(['/home/me/.npmrc'])
   expect(bash('cat <<-END\n\t/home/me/.x\n\tEND\nls ~/.y')).toEqual(['/home/me/.y'])
   expect(bash('echo a#b ~/.z')).toEqual(['/home/me/.z'])
+  expect(bash('((x = 1 << 2))\ncat ~/.y')).toEqual(['/home/me/.y'])
+  expect(bash('echo $((1 << 2)) ~/.w')).toEqual(['/home/me/.w'])
+})
+
+test('an unquoted heredoc body still runs its substitutions', () => {
+  expect(bash('cat <<EOF\n$(cat ~/.ssh/id)\nEOF')).toEqual(['/home/me/.ssh/id'])
+  expect(bash("cat <<'EOF'\n$(cat ~/.ssh/id)\nEOF")).toEqual([])
+})
+
+test('a $(…) holding a heredoc or quotes ends at its own parenthesis', () => {
+  const commit = "git commit -m \"$(cat <<'EOF'\nDon't count it.\nEOF\n)\" && cat ~/.ssh/id"
+  expect(bash(commit)).toEqual(['/home/me/.ssh/id'])
+  expect(bash("gh pr create --body \"$(cat <<'EOF'\nIt's done\nEOF\n)\" --title t && cp a ~/.b")).toEqual(['/home/me/.b'])
+  expect(bash('echo "$(printf ")")" && cat ~/.ssh/id')).toEqual(['/home/me/.ssh/id'])
 })
 
 test('command substitutions are split as commands of their own', () => {
@@ -72,11 +93,15 @@ test('command substitutions are split as commands of their own', () => {
   expect(bash('cat ~/$(echo .ssh)/id')).toEqual([HOME])
 })
 
-test('a -c script of a shell is split as a command', () => {
+test('a -c script of a shell is split as a command, options before it skipped', () => {
   expect(bash('bash -c "cat ~/.ssh/id"')).toEqual(['/home/me/.ssh/id'])
   expect(bash("/bin/sh -c 'cat ~/.aws/x'")).toEqual(['/home/me/.aws/x'])
   expect(bash('zsh -lc "ls ~/.zshrc"')).toEqual(['/home/me/.zshrc'])
   expect(bash('bash -c "/home/me/run.sh arg"')).toEqual(['/home/me/run.sh'])
+  expect(bash('bash -o pipefail -c "cat ~/.ssh/id"')).toEqual(['/home/me/.ssh/id'])
+  expect(bash("bash --login -c 'cat ~/.ssh/id'")).toEqual(['/home/me/.ssh/id'])
+  expect(bash("bash -c -- 'cat ~/.ssh/id'")).toEqual(['/home/me/.ssh/id'])
+  expect(bash('bash script.sh -c x')).toEqual([])
 })
 
 test('~ before a redirect, and line continuations', () => {
@@ -93,13 +118,15 @@ test('file tools: a path in ~ outside the root counts, the root and elsewhere do
   expect(paths('NotebookEdit', { notebook_path: '/home/me/n.ipynb' })).toEqual(['/home/me/n.ipynb'])
 })
 
-test('Glob: the pattern\'s literal start is resolved, against its path when given', () => {
+test('Glob: the pattern\'s literal start is resolved; a pattern without one adds nothing', () => {
+  const notes = placeOf({ home: HOME, root: '~/Dev', cwd: '/home/me/notes' })
   expect(paths('Glob', { pattern: '~/.ssh/*' })).toEqual(['/home/me/.ssh'])
   expect(paths('Glob', { pattern: '../../.ssh/*' })).toEqual(['/home/me/.ssh'])
   expect(paths('Glob', { pattern: './../../.ssh/*' })).toEqual(['/home/me/.ssh'])
   expect(paths('Glob', { pattern: 'a/../../../.aws/**' })).toEqual(['/home/me/.aws'])
   expect(paths('Glob', { pattern: '../*', path: '/home/me/Dev' })).toEqual([HOME])
-  expect(paths('Glob', { pattern: '**/*.ts' })).toEqual([])
+  expect(paths('Glob', { pattern: '**/*.md' }, notes)).toEqual([])
+  expect(paths('Glob', { pattern: '**/*.md', path: '~/notes' })).toEqual(['/home/me/notes'])
 })
 
 test('only the built-in file tools are read; MCP tools are left to the engine', () => {
@@ -107,9 +134,10 @@ test('only the built-in file tools are read; MCP tools are left to the engine', 
   expect(paths('WebFetch', { url: 'https://x/home/me' })).toEqual([])
 })
 
-test('Bash: ~, $HOME, absolute and ../ words count, each path once', () => {
+test('Bash: ~, $HOME, absolute, ../ and ./../ words count, each path once', () => {
   expect(bash('cat ~/.ssh/id && ls $HOME/.config "/home/me/.npmrc"')).toEqual(['/home/me/.ssh/id', '/home/me/.config', '/home/me/.npmrc'])
   expect(bash('grep x ../../.bashrc; cat ~/.bashrc')).toEqual(['/home/me/.bashrc'])
+  expect(bash('cat ./../../.npmrc')).toEqual(['/home/me/.npmrc'])
   expect(bash('x=~/.aws; echo >~/.log')).toEqual(['/home/me/.aws', '/home/me/.log'])
   expect(bash('tool --config=/home/me/.toolrc')).toEqual(['/home/me/.toolrc'])
   expect(bash('PATH=~/Dev/bin:~/.ssh ls')).toEqual(['/home/me/.ssh'])
@@ -124,7 +152,7 @@ test('Bash: remote and revision paths do not count, home itself does', () => {
   expect(bash('echo $HOME')).toEqual([HOME])
 })
 
-test('Bash: leading cds over && ; and newlines move the base, flags skipped', () => {
+test('Bash: cds chained by && ; or a newline move the base, flags and assignments skipped', () => {
   expect(bash('ls ..', IN_DEV)).toEqual([HOME])
   expect(bash('cd .. && cat .ssh/id', IN_DEV)).toEqual([HOME])
   expect(bash('cd ~ && cat .bashrc')).toEqual([HOME])
@@ -133,7 +161,16 @@ test('Bash: leading cds over && ; and newlines move the base, flags skipped', ()
   expect(bash('cd ~/.ssh; cat ../.aws/x')).toEqual(['/home/me/.ssh', '/home/me/.aws/x'])
   expect(bash('cd -P ~/.ssh && cat ../.aws/x')).toEqual(['/home/me/.ssh', '/home/me/.aws/x'])
   expect(bash('cd ~/Dev/a\ncat ../../.npmrc')).toEqual(['/home/me/.npmrc'])
+  expect(bash('ls && cd ~/.config && cat ../.npmrc')).toEqual(['/home/me/.config', '/home/me/.npmrc'])
+  expect(bash('CDPATH= cd ~/.config && cat ../.npmrc')).toEqual(['/home/me/.config', '/home/me/.npmrc'])
   expect(bash('cd ~/x || cat ../.npmrc')).toEqual(['/home/me/x'])
+  expect(bash('ls | cd ~/x && cat ../.npmrc')).toEqual(['/home/me/x'])
+})
+
+test('Bash: a cd into a substitution counts what is known and forgets the base', () => {
+  expect(bash('cd ~/$(echo .ssh) && ls ../x')).toEqual([HOME])
+  expect(bash('cd "$(git rev-parse --show-toplevel)" && cat ../.npmrc && cat ~/.y')).toEqual(['/home/me/.y'])
+  expect(sightingOf('Bash', { command: 'cd ~/$(echo .ssh) && ls' }, PLACE).label).toBe('~')
 })
 
 test('Bash: the root, other users and mid-word tildes do not count', () => {
@@ -149,34 +186,45 @@ test('Bash: a home outside /home is found by its literal path', () => {
 })
 
 test('the label: the first path under ~, else the command\'s start cut by character', () => {
-  expect(see('Read', { file_path: '/home/me/.ssh/id' }, PLACE).label).toBe('~/.ssh/id')
-  expect(see('Bash', { command: 'ls ~' }, PLACE).label).toBe('~')
-  expect(see('Bash', { command: 'node  -e "x"' }, PLACE).label).toBe('node -e "x"')
-  expect(see('Bash', { command: `${'x'.repeat(46)}😀😀😀` }, PLACE).label).toBe(`${'x'.repeat(46)}😀…`)
-  expect(see('Read', { file_path: '/etc/hosts' }, PLACE).label).toBe('Read')
+  expect(sightingOf('Read', { file_path: '/home/me/.ssh/id' }, PLACE).label).toBe('~/.ssh/id')
+  expect(sightingOf('Bash', { command: 'ls ~' }, PLACE).label).toBe('~')
+  expect(sightingOf('Bash', { command: 'node  -e "x"' }, PLACE).label).toBe('node -e "x"')
+  expect(sightingOf('Bash', { command: `${'x'.repeat(46)}😀😀😀` }, PLACE).label).toBe(`${'x'.repeat(46)}😀…`)
+  expect(sightingOf('Read', { file_path: '/etc/hosts' }, PLACE).label).toBe('Read')
 })
 
-const HOME_READ = see('Read', { file_path: '/home/me/.bashrc' }, PLACE)
-const tag = (verdict: Verdict, seen = HOME_READ) => tagFor(verdict, seen, PLACE)
+const HOME_READ = sightingOf('Read', { file_path: '/home/me/.bashrc' }, PLACE)
+const tag = (verdict: Verdict, sighting = HOME_READ) => tagFor(verdict, sighting, HOME)
+const ASK: Verdict = { decision: 'ask', approver: 'person' }
 
 test('core: allow is allowed, deny is blocked, nothing without a home path', () => {
   expect(tag({ decision: 'allow' })).toBe('allowed')
   expect(tag({ decision: 'deny' })).toBe('blocked')
-  expect(tag({ decision: 'allow' }, see('Read', { file_path: '/etc/hosts' }, PLACE))).toBeNull()
+  expect(tag({ decision: 'allow' }, sightingOf('Read', { file_path: '/etc/hosts' }, PLACE))).toBeNull()
+})
+
+test('a refusal after core\'s allow is no home block, and never "allowed"', () => {
+  expect(tag({ decision: 'allow', refused: true })).toBeNull()
 })
 
 test('"asked" only when the person saw a dialog; otherwise what became of the call', () => {
-  expect(tag({ decision: 'ask', dialog: true })).toBe('asked')
-  expect(tag({ decision: 'ask', dialog: true, didRun: true })).toBe('asked')
+  expect(tag({ ...ASK, dialog: true })).toBe('asked')
+  expect(tag({ ...ASK, dialog: true, didRun: true })).toBe('asked')
+  expect(tag({ ...ASK, dialog: true, refused: true })).toBe('asked')
+  expect(tag({ ...ASK, didRun: true })).toBe('allowed')
+  expect(tag({ ...ASK, refused: true })).toBe('blocked')
+  expect(tag(ASK)).toBeNull()
+})
+
+test('an ask nobody can answer is a deny', () => {
+  expect(tag({ decision: 'ask' })).toBe('blocked')
   expect(tag({ decision: 'ask', didRun: true })).toBe('allowed')
-  expect(tag({ decision: 'ask', refused: true })).toBe('blocked')
-  expect(tag({ decision: 'ask' })).toBeNull()
 })
 
 test('a verdict about something else is no home access, unless the call then ran', () => {
   expect(tag({ decision: 'deny', hook: 'PreToolUse' })).toBeNull()
-  expect(tag({ decision: 'ask', plugin: 'pii-guard', dialog: true })).toBeNull()
-  expect(tag({ decision: 'ask', plugin: 'pii-guard', dialog: true, didRun: true })).toBe('allowed')
+  expect(tag({ ...ASK, plugin: 'pii-guard', dialog: true })).toBeNull()
+  expect(tag({ ...ASK, plugin: 'pii-guard', dialog: true, didRun: true })).toBe('allowed')
   expect(tag({ decision: 'deny', setting: 'permissions.someOtherCheck' })).toBeNull()
   expect(tag({ decision: 'deny', setting: 'permissions.blockWritesOutsideWorkingDirectories' })).toBe('blocked')
 })
@@ -191,15 +239,22 @@ test('a rule is home-caused when it names ~ or home as a whole path word', () =>
 })
 
 test('the read block tags a Bash call whose path is hidden, never a file tool outside ~', () => {
-  const hidden = see('Bash', { command: 'node script.js' }, PLACE)
-  expect(tag({ decision: 'ask', setting: READ_BLOCK, dialog: true }, hidden)).toBe('asked')
+  const hidden = sightingOf('Bash', { command: 'node script.js' }, PLACE)
+  expect(tag({ ...ASK, setting: READ_BLOCK, dialog: true }, hidden)).toBe('asked')
   expect(tag({ decision: 'deny', setting: READ_BLOCK }, hidden)).toBe('blocked')
   expect(hidden.label).toBe('node script.js')
-  expect(tag({ decision: 'ask', setting: READ_BLOCK, dialog: true }, see('Read', { file_path: '/etc/hosts' }, PLACE))).toBeNull()
+  expect(tag({ ...ASK, setting: READ_BLOCK, dialog: true }, sightingOf('Read', { file_path: '/etc/hosts' }, PLACE))).toBeNull()
 })
 
-test('a dialog is matched to its call by tool and input, key order aside', () => {
-  expect(isSameCall({ tool: 'Bash', input: { command: 'ls', timeout: 1 } }, { tool: 'Bash', input: { timeout: 1, command: 'ls' } })).toBe(true)
-  expect(isSameCall({ tool: 'Bash', input: { command: 'ls' } }, { tool: 'Bash', input: { command: 'ls -a' } })).toBe(false)
-  expect(isSameCall({ tool: 'Read', input: { file_path: 'x' } }, { tool: 'Edit', input: { file_path: 'x' } })).toBe(false)
+test('a permission request goes to the oldest pending call of its loop, tool and input', () => {
+  const pending = [
+    { id: 'a', tool: 'Bash', input: { command: 'ls', timeout: 1 } },
+    { id: 'b', tool: 'Bash', input: { command: 'ls', timeout: 1 }, agentId: 'sub' },
+    { id: 'c', tool: 'Bash', input: { timeout: 1, command: 'ls' } },
+  ]
+  expect(requestedCall(pending, { tool: 'Bash', input: { timeout: 1, command: 'ls' } })).toBe('a')
+  expect(requestedCall(pending.slice(1), { tool: 'Bash', input: { command: 'ls', timeout: 1 } })).toBe('c')
+  expect(requestedCall(pending, { tool: 'Bash', input: { command: 'ls', timeout: 1 }, agentId: 'sub' })).toBe('b')
+  expect(requestedCall(pending, { tool: 'Bash', input: { command: 'ls -a' } })).toBeUndefined()
+  expect(requestedCall(pending, { tool: 'Read', input: { command: 'ls', timeout: 1 } })).toBeUndefined()
 })

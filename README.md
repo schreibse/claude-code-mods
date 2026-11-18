@@ -388,6 +388,12 @@ the directories alphabetically, which gives `repo-line < tamagoxtix < task-meter
 lists directories in creation order (btrfs), re-create an entry to move it after the others:
 `mv tamagoxtix x && mv x tamagoxtix`. `claude -p ok --debug` writes the order to `~/.claude/debug/`.
 
+Mods installed from the marketplace load in install order instead (the order of
+`~/.claude/plugins/installed_plugins.json`), and a newly installed mod loads last. Install repo-line
+before tamagoxtix and task-meter after it; to move a mod, uninstall and reinstall the ones that must
+follow it. A mod's `$.store` is keyed by plugin id, so switching a mod from a skills-dir copy to an
+installed one starts it with an empty store.
+
 ### Releasing a mod
 
 Marketplace users only get a change once the mod's `version` moves, so a change meant for them

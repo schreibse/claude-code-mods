@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, heavyScopes, invocations, isHeavy, isServe, nodeScripts, parsePressure, refusal, runningRefusal, scoped, segments, serveRefusal, serveScopes, withServeElsewhere } from './rules'
+import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, heavyScopes, invocations, isHeavy, isServe, machineRefusal, nodeScripts, parseMeminfo, parsePressure, refusal, runningRefusal, scoped, segments, serveRefusal, serveScopes, withServeElsewhere } from './rules'
 
 const GIB = 1024 ** 3
 const shell = { cwd: '/repo', home: '/home/u' }
@@ -127,6 +127,21 @@ test('a full or pressured command slice refuses, with the numbers', () => {
 test('the sessions slice refuses near its MemoryHigh, later than the command slice', () => {
   expect(crowdedRefusal({ usedBytes: 9 * GIB, maxBytes: 11.5 * GIB, psiAvg10: 0 }, 'claude.slice')).toBeNull()
   expect(crowdedRefusal({ usedBytes: 11.4 * GIB, maxBytes: 11.5 * GIB, psiAvg10: 0 }, 'claude.slice')).toContain('claude.slice is at 11.4/11.5G')
+})
+
+test('the Docker slice refuses near its MemoryMax', () => {
+  expect(crowdedRefusal({ usedBytes: 5 * GIB, maxBytes: 6 * GIB, psiAvg10: 0 }, 'docker.slice')).toBeNull()
+  expect(crowdedRefusal({ usedBytes: 5.6 * GIB, maxBytes: 6 * GIB, psiAvg10: 0 }, 'docker.slice')).toContain('docker.slice is at 5.6/6G')
+})
+
+test('the machine refuses only when memory and swap are short together', () => {
+  const meminfo = (available: number, swapFree: number) => `MemTotal:       28538952 kB\nMemAvailable:   ${available * 1024 ** 2} kB\nSwapTotal:       8388608 kB\nSwapFree:        ${swapFree * 1024 ** 2} kB\n`
+  const refusedAt = (available: number, swapFree: number) => machineRefusal(parseMeminfo(meminfo(available, swapFree)) ?? { availableBytes: NaN, swapFreeBytes: NaN, swapTotalBytes: NaN })
+  expect(refusedAt(17, 8)).toBeNull()
+  expect(refusedAt(2, 6)).toBeNull()
+  expect(refusedAt(10, 0)).toBeNull()
+  expect(refusedAt(2, 1)).toContain('2.0G of memory available and 1.0/8G of swap free')
+  expect(parseMeminfo('')).toBeNull()
 })
 
 test('a Node tool started by systemd-run outside the claude slices is refused', () => {

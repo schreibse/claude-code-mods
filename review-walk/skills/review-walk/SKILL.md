@@ -9,6 +9,8 @@ Turns the review reports already in this conversation into one ranked list and h
 each finding before anything changes. The review-walk mod draws the progress; it reads the tool
 calls below, so keep their shape exactly.
 
+**One invocation per round.** A later round (a review of the fix commit) invokes this skill again: the band arms only on the invocation, and each walk's closing report disarms it.
+
 ## 1. Gather
 
 - Take every finding from the reports in this conversation. No report yet: say so and stop; this

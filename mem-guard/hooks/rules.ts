@@ -1,4 +1,5 @@
 export type Pressure = { usedBytes: number; maxBytes: number; psiAvg10: number }
+export type Machine = { availableBytes: number; swapFreeBytes: number; swapTotalBytes: number }
 export type Shell = { cwd: string; home: string }
 export type ScriptsByDir = Record<string, Record<string, string>>
 export type Invocation = { line: string; tool: string; call: string; script: string | null; dir: string }
@@ -8,6 +9,10 @@ const FULL_SHARE = 0.75
 // Every session shares claude.slice; past its MemoryHigh the kernel throttles them all.
 const SESSIONS_FULL_SHARE = 0.85
 const PSI_LIMIT = 20
+const DOCKER_FULL_SHARE = 0.9
+const SHARE_BY_SLICE: Record<string, number> = { 'claude-cmd.slice': FULL_SHARE, 'claude.slice': SESSIONS_FULL_SHARE, 'docker.slice': DOCKER_FULL_SHARE }
+const MIN_AVAILABLE_BYTES = 3 * GIB
+const MIN_SWAP_FREE_SHARE = 0.25
 
 const HEAVY_TOOLS = ['nx', 'jest', 'vitest', 'playwright', 'tsc', 'ngc']
 const NODE_TOOLS = ['node', 'npx', 'pnpm', 'npm', 'yarn', ...HEAVY_TOOLS]
@@ -208,11 +213,25 @@ export function drivesPlaywright(source: string): boolean {
 export function crowdedRefusal(pressure: Pressure, slice = 'claude-cmd.slice'): string | null {
   const used = pressure.usedBytes / GIB
   const max = pressure.maxBytes / GIB
-  const share = slice === 'claude-cmd.slice' ? FULL_SHARE : SESSIONS_FULL_SHARE
+  const share = SHARE_BY_SLICE[slice] ?? FULL_SHARE
   if (pressure.usedBytes <= pressure.maxBytes * share && pressure.psiAvg10 <= PSI_LIMIT) {
     return null
   }
   return `${slice} is at ${used.toFixed(1)}/${Number(max.toFixed(1))}G, pressure ${pressure.psiAvg10.toFixed(0)}%. Wait for a running build or test to finish, stop a dev server you are not using, or push and let CI run it.`
+}
+
+export function parseMeminfo(meminfo: string): Machine | null {
+  const bytes = (field: string) => Number(new RegExp(String.raw`^${field}:\s+(\d+) kB`, 'm').exec(meminfo)?.[1] ?? NaN) * 1024
+  const machine = { availableBytes: bytes('MemAvailable'), swapFreeBytes: bytes('SwapFree'), swapTotalBytes: bytes('SwapTotal') }
+  return Object.values(machine).every(Number.isFinite) ? machine : null
+}
+
+/** Short on both at once: a swap full of stale pages beside free memory is not a shortage. */
+export function machineRefusal({ availableBytes, swapFreeBytes, swapTotalBytes }: Machine): string | null {
+  if (availableBytes >= MIN_AVAILABLE_BYTES || swapFreeBytes > swapTotalBytes * MIN_SWAP_FREE_SHARE) {
+    return null
+  }
+  return `the machine has ${(availableBytes / GIB).toFixed(1)}G of memory available and ${(swapFreeBytes / GIB).toFixed(1)}/${Number((swapTotalBytes / GIB).toFixed(1))}G of swap free, counting Docker and the desktop. Stop a dev server or the Docker stack you are not using, or push and let CI run it.`
 }
 
 const BUDGET_SLICE = /\s--slice[= ]claude(?:-cmd)?\.slice(?=\s|$)/

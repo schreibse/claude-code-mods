@@ -1,5 +1,10 @@
 # mem-guard changelog
 
+## 0.4.0 — 2026-11-12
+
+- Heavy runs and dev servers are also refused when the whole machine is short: under 3G of memory available and under 25% of swap free at once. Docker and the desktop sit outside the claude slices and were not seen.
+- `docker.slice` is read like the claude slices and refuses above 90% of its MemoryMax; without that slice or a cap on it, nothing changes.
+
 ## 0.3.2 — 2026-10-12
 
 - A refused dev server start also suggests asking the user to serve the app in their own terminal, outside the shared budget.

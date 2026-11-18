@@ -1,9 +1,11 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { checkRunnerRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, invocations, isHeavy, isServe, nodeScripts, parsePressure, refusal, runningRefusal, scoped, withServeElsewhere } from './rules'
+import { checkRunnerRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, invocations, isHeavy, isServe, machineRefusal, nodeScripts, parseMeminfo, parsePressure, refusal, runningRefusal, scoped, withServeElsewhere } from './rules'
 import type { Invocation, Pressure, ScriptsByDir } from './rules'
 
-const sliceDirs = new Map<string, string>()
+const DOCKER_SLICE = 'docker.slice'
+// A system slice, so its path is fixed; absent or uncapped it reads as no pressure.
+const sliceDirs = new Map<string, string>([[DOCKER_SLICE, '/sys/fs/cgroup/docker.slice']])
 let home = ''
 
 const CMD_SLICE = 'claude-cmd.slice'
@@ -34,7 +36,7 @@ async function readPressure($: EngineInterface, name: string): Promise<Pressure 
 }
 
 async function crowdedSlice($: EngineInterface): Promise<string | null> {
-  for (const name of [CMD_SLICE, SESSIONS_SLICE]) {
+  for (const name of [CMD_SLICE, SESSIONS_SLICE, DOCKER_SLICE]) {
     const pressure = await readPressure($, name)
     const crowded = pressure === null ? null : crowdedRefusal(pressure, name)
     if (crowded !== null) {
@@ -42,6 +44,11 @@ async function crowdedSlice($: EngineInterface): Promise<string | null> {
     }
   }
   return null
+}
+
+async function shortMachine($: EngineInterface): Promise<string | null> {
+  const machine = parseMeminfo((await $.fs.read('/proc/meminfo').catch(() => '')) ?? '')
+  return machine === null ? null : machineRefusal(machine)
 }
 
 async function scriptsIn($: EngineInterface, dir: string): Promise<Record<string, string>> {
@@ -87,7 +94,7 @@ export const register: Register = on => {
       return { deny: `mem-guard: ${refused}` }
     }
     if (isHeavy(calls) || isServe(calls) || (await runsPlaywrightScript($, calls))) {
-      const crowded = await crowdedSlice($)
+      const crowded = (await crowdedSlice($)) ?? (await shortMachine($))
       if (crowded !== null) {
         return { deny: `mem-guard: ${withServeElsewhere(calls, crowded)}` }
       }

@@ -40,7 +40,7 @@ test('a pasted sentence is found however it was rewrapped', () => {
   expect(isPastedIn('anything', '')).toBe(false)
 })
 
-test('/handover drop N names an entry, nothing else does', () => {
+test('/handover-pick drop N names an entry, nothing else does', () => {
   expect(dropIndex('drop 2')).toBe(2)
   expect(dropIndex(' drop  10 ')).toBe(10)
   expect(dropIndex('2')).toBeNull()

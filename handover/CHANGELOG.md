@@ -1,5 +1,9 @@
 # handover changelog
 
+## 1.0.0 — 2026-11-18
+
+- **Action needed:** the list command is now `/handover-pick` (`/handover-pick N`, `/handover-pick drop N`). Installed from the marketplace, the plugin's own skill holds the name `/handover`, so the engine refused the command and the mod's `session.start` hook failed.
+
 ## 0.3.0 — 2026-10-12
 
 - A sentence is filed under the git repo of the file the session wrote last (the plan file the skill updates first), not the folder the session started in: work in a repo from a session started in its parent folder now shows in that repo.

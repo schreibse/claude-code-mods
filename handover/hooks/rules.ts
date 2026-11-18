@@ -50,7 +50,7 @@ export function isPastedIn(prompt: string, sentence: string): boolean {
   return sentence !== '' && oneLine(prompt).includes(oneLine(sentence))
 }
 
-// `/handover drop N` names an entry of the list; anything else is a pick or a listing.
+// `/handover-pick drop N` names an entry of the list; anything else is a pick or a listing.
 export function dropIndex(args: string): number | null {
   const match = /^drop\s+([1-9]\d*)$/.exec(args.trim())
   return match === null ? null : Number(match[1])

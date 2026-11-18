@@ -6,7 +6,7 @@ import type { Entry } from './rules'
 import type { Handover } from '../types'
 
 const COPY_COMMAND = 'handover-copy'
-const PICK_COMMAND = 'handover'
+const PICK_COMMAND = 'handover-pick'
 const OFFER_EVERY_MS = 500
 const OFFER_TRIES = 20
 const PREVIEW_CHARS = 160
@@ -18,7 +18,7 @@ const lastEdit = atom({ plugin: 'handover', key: 'lastEdit' } as const, null)
 
 // The key of the sentence last offered in the box; the next prompt sent spends it.
 let offered: string | null = null
-// The list the band and the last bare /handover numbered, so /handover N picks what was shown.
+// The list the band and the last bare /handover-pick numbered, so /handover-pick N picks what was shown.
 let listed: Entry[] = []
 
 async function home($: EngineInterface): Promise<string> {
@@ -162,7 +162,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: COPY_COMMAND, description: 'Copy the handover sentence and hide its band' })
-    await $.command.register({ name: PICK_COMMAND, description: 'List the handovers for this repo (or folder, outside a repo); /handover N puts one in the prompt, /handover drop N removes it' })
+    await $.command.register({ name: PICK_COMMAND, description: 'List the handovers for this repo (or folder, outside a repo); /handover-pick N puts one in the prompt, /handover-pick drop N removes it' })
     return next(e)
   })
 

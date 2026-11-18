@@ -111,12 +111,12 @@ test('a fresh process proposes nothing but lists the repo\'s sentences, newest f
   expect(await ui.find({ type: 'Text', text: '3. elsewhere' })).toBeUndefined()
 })
 
-test('/handover lists, /handover N proposes that one and the next prompt spends it', async ($, on) => {
+test('/handover-pick lists, /handover-pick N proposes that one and the next prompt spends it', async ($, on) => {
   const { clock, removed, suggested, store } = home(on)
   store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
   store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
-  expect((await $.command.run({ command: 'handover', args: '' } as never)).text).toBe(`1. ${ANALYZE}\n\n2. ${WORK}`)
-  expect((await $.command.run({ command: 'handover', args: '2' } as never)).text).toBe('Handover 2 waits in the prompt; Tab takes it.')
+  expect((await $.command.run({ command: 'handover-pick', args: '' } as never)).text).toBe(`1. ${ANALYZE}\n\n2. ${WORK}`)
+  expect((await $.command.run({ command: 'handover-pick', args: '2' } as never)).text).toBe('Handover 2 waits in the prompt; Tab takes it.')
   await clock.advance(500)
   expect(suggested).toEqual([WORK])
   await $.prompt.submit({ text: WORK } as never)
@@ -144,15 +144,15 @@ test('a literal ~ path still files the sentence per session', async ($, on) => {
   expect(writes).toEqual(['/home/me/.claude/handovers/s1.md'])
 })
 
-test('/handover N picks from the list shown, though another session wrote since', async ($, on) => {
+test('/handover-pick N picks from the list shown, though another session wrote since', async ($, on) => {
   const { clock, suggested, store } = home(on)
   store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
   await $.classic.SessionStart({ source: 'startup' } as never)
   store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
-  await $.command.run({ command: 'handover', args: '1' } as never)
+  await $.command.run({ command: 'handover-pick', args: '1' } as never)
   await clock.advance(500)
   expect(suggested).toEqual([WORK])
-  expect((await $.command.run({ command: 'handover', args: '' } as never)).text).toBe(`1. ${ANALYZE}\n\n2. ${WORK}`)
+  expect((await $.command.run({ command: 'handover-pick', args: '' } as never)).text).toBe(`1. ${ANALYZE}\n\n2. ${WORK}`)
 })
 
 test('a sentence pasted by hand is spent, in any repo', async ($, on) => {
@@ -164,19 +164,19 @@ test('a sentence pasted by hand is spent, in any repo', async ($, on) => {
   expect([...store.keys()]).toEqual(['handover:s1'])
 })
 
-test('/handover drop N removes that entry and renumbers the band', async ($, on) => {
+test('/handover-pick drop N removes that entry and renumbers the band', async ($, on) => {
   const { removed, store } = home(on)
   store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo' })
   store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
   await $.classic.SessionStart({ source: 'startup' } as never)
-  expect((await $.command.run({ command: 'handover', args: 'drop 1' } as never)).text).toBe('Handover 1 dropped.')
+  expect((await $.command.run({ command: 'handover-pick', args: 'drop 1' } as never)).text).toBe('Handover 1 dropped.')
   expect(removed).toEqual(['/home/me/.claude/handovers/s2.md'])
   expect([...store.keys()]).toEqual(['handover:s1'])
   const ui = await band($)
   expect(await ui.find({ type: 'Text', text: `1. ${WORK}` })).toBeDefined()
-  expect((await $.command.run({ command: 'handover', args: 'drop 1' } as never)).text).toBe('Handover 1 dropped.')
+  expect((await $.command.run({ command: 'handover-pick', args: 'drop 1' } as never)).text).toBe('Handover 1 dropped.')
   expect(await (await band($)).find({ type: 'Text', text: `1. ${WORK}` })).toBeUndefined()
-  expect((await $.command.run({ command: 'handover', args: 'drop 1' } as never)).text).toBe('No handover for this repo or folder.')
+  expect((await $.command.run({ command: 'handover-pick', args: 'drop 1' } as never)).text).toBe('No handover for this repo or folder.')
 })
 
 test('a sentence is filed under the repo of the file the session wrote last', async ($, on) => {
@@ -200,5 +200,5 @@ test('a session started inside a repo lists the repo\'s sentences', async ($, on
   repos.set('/r/repo/web/src', '/r/repo/web')
   store.set('handover:s1', { text: WORK, at: 500, root: '/r/repo/web' })
   store.set('handover:s2', { text: ANALYZE, at: 900, root: '/r/repo' })
-  expect((await $.command.run({ command: 'handover', args: '' } as never)).text).toBe(`1. ${WORK}`)
+  expect((await $.command.run({ command: 'handover-pick', args: '' } as never)).text).toBe(`1. ${WORK}`)
 })

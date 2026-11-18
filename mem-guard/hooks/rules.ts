@@ -282,9 +282,9 @@ const SERVE = /\bnx(?:\.js)?\s+serve\b|:serve(?::\S+)?(?:\s|$)/
 function scopesOf(ps: string): string[][] {
   const scopes = new Map<string, string[]>()
   for (const row of ps.split('\n')) {
-    const match = /\/claude\.slice\/(?:claude-cmd\.slice\/)?([^\s/]+\.(?:scope|service))\S*\s+(.*)$/.exec(row)
-    if (match) {
-      scopes.set(match[1], [...(scopes.get(match[1]) ?? []), match[2]])
+    const [, scope, args] = /\/claude\.slice\/(?:claude-cmd\.slice\/)?([^\s/]+\.(?:scope|service))\S*\s+(.*)$/.exec(row) ?? []
+    if (scope !== undefined && args !== undefined) {
+      scopes.set(scope, [...(scopes.get(scope) ?? []), args])
     }
   }
   return [...scopes.values()]

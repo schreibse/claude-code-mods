@@ -83,7 +83,7 @@ test('a pipeline-wait timeout row draws nothing, other failures stay', async ($,
   expect(await kept.find({ text: 'engine row' })).toBeDefined()
 })
 
-test('a read home-watch tagged keeps its row and its group', async ($, on) => {
+test('a read home-watch tagged is handed down with its group', async ($, on) => {
   engineToolRow(on)
   on('ui.render', { component: 'ToolGroup' }, ($, e) => {
     const { Text } = $.ui.resolve(e)
@@ -92,7 +92,7 @@ test('a read home-watch tagged keeps its row and its group', async ($, on) => {
   on('state.get', { plugin: 'home-watch', key: 'calls' }, () => ({ value: { value: { h1: { tag: 'blocked' }, h2: { tag: null } }, version: 1 } }) as never)
   const props = { ...ROW, tool: 'Read', input: { file_path: '/home/me/.bashrc' }, output: { type: 'text' } }
   const tagged = await $.ui.mount({ plugin: 'quiet-bash', surface: 'terminal', component: 'ToolUse', props: { ...props, tool_use_id: 'h1' } })
-  expect(await tagged.find({ type: 'Text' })).toBeDefined()
+  expect(await tagged.find({ type: 'Text', text: 'engine row' })).toBeDefined()
   const untagged = await $.ui.mount({ plugin: 'quiet-bash', surface: 'terminal', component: 'ToolUse', props: { ...props, tool_use_id: 'h2' } })
   expect(await untagged.find({ type: 'Text' })).toBeUndefined()
   const group = await $.ui.mount({

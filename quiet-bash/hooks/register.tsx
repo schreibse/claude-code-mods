@@ -23,8 +23,9 @@ const isLoud = atom({ plugin: 'quiet-bash', key: 'isLoud' } as const, false)
 const thumbs = atom({ plugin: 'quiet-bash', key: 'thumbs' } as const, {})
 const homeCalls = atom({ plugin: 'home-watch', key: 'calls' } as const, {})
 
-async function isHomeTagged($: EngineInterface, id: string | undefined): Promise<boolean> {
-  return id !== undefined && ((await read($, homeCalls))[id]?.tag ?? null) !== null
+async function homeTagged($: EngineInterface): Promise<(id: string | undefined) => boolean> {
+  const all = await read($, homeCalls)
+  return id => id !== undefined && (all[id]?.tag ?? null) !== null
 }
 
 async function shotInfo($: EngineInterface, file: string, mtimeMs = 0): Promise<ShotInfo | null> {
@@ -129,7 +130,7 @@ async function identify($: EngineInterface, file: string): Promise<ShotInfo | nu
 async function toolRow($: EngineInterface, e: ToolUseRender, engineRow: () => ReturnType<Parameters<Hook<'ui.render'>>[2]>) {
   const { tool, input, isRunning, isErrored, isInterrupted, output } = e.props
   const title = summary(tool, input, await homeOf($))
-  if (title === null || (await read($, isLoud))) {
+  if (title === null || (await read($, isLoud)) || (await homeTagged($))(e.props.tool_use_id)) {
     return engineRow()
   }
 
@@ -154,7 +155,7 @@ async function toolRow($: EngineInterface, e: ToolUseRender, engineRow: () => Re
 
   const isDone = !isRunning && !isFailed && !isInterrupted
   const isQuiet = title === '' || isQuietRead(tool, readOnly.has(e.props.tool_use_id))
-  if (isDone && isQuiet && !(await isHomeTagged($, e.props.tool_use_id))) {
+  if (isDone && isQuiet) {
     return <Box />
   }
 
@@ -248,8 +249,8 @@ export const register: Register = on => {
     if (calls.some(hasThumb)) {
       return next({ ...e, props: { ...e.props, isExpanded: true } })
     }
-    const tagged = await Promise.all(calls.map(call => isHomeTagged($, call.tool_use_id)))
-    if (isExpanded || calls.some(call => call.isErrored) || tagged.includes(true) || (await read($, isLoud))) {
+    const isTagged = await homeTagged($)
+    if (isExpanded || calls.some(call => call.isErrored) || calls.some(call => isTagged(call.tool_use_id)) || (await read($, isLoud))) {
       return next(e)
     }
     const { Box } = $.ui.resolve(e)

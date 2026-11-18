@@ -1,4 +1,4 @@
-import type { PendingCall, Place, Sighting, Tag, Verdict } from '../types'
+import type { Outcome, PendingCall, Place, Sighting, Tag, Verdict } from '../types'
 
 type Token = { word: string } | { op: string }
 type Heredoc = { delimiter: string; strip: boolean; expands: boolean }
@@ -388,17 +388,21 @@ function isHomeCaused(verdict: Verdict, home: string): boolean {
   return verdict.hook === undefined && verdict.plugin === undefined
 }
 
-// "asked" needs a dialog the person saw; an ask settled out of their sight is tagged by what became of the call,
+export function isWatched(sighting: Sighting, setting: string | undefined): boolean {
+  return sighting.paths.length > 0 || (sighting.tool === 'Bash' && setting === READ_BLOCK)
+}
+
+// "asked" needs a dialog a person saw; an ask settled out of their sight is tagged by what became of the call,
 // and one with no approver is a deny.
 export function tagFor(verdict: Verdict, sighting: Sighting, home: string): Tag | null {
-  if (sighting.paths.length === 0 && !(sighting.tool === 'Bash' && verdict.setting === READ_BLOCK)) {
+  if (!isWatched(sighting, verdict.setting)) {
     return null
   }
   if (verdict.decision === 'allow') {
     return verdict.refused === true ? null : 'allowed'
   }
   const isHome = isHomeCaused(verdict, home)
-  if (isHome && verdict.dialog === true) {
+  if (isHome && verdict.dialog === true && verdict.approver === 'person') {
     return 'asked'
   }
   if (verdict.didRun === true) {
@@ -406,6 +410,16 @@ export function tagFor(verdict: Verdict, sighting: Sighting, home: string): Tag 
   }
   const isRefused = verdict.decision === 'deny' || verdict.approver === undefined || verdict.refused === true
   return isHome && isRefused ? 'blocked' : null
+}
+
+export function outcomeOf(tag: Tag, verdict: Verdict): Outcome {
+  if (tag !== 'asked') {
+    return tag
+  }
+  if (verdict.didRun === true) {
+    return 'approved'
+  }
+  return verdict.refused === true || verdict.didEnd === true ? 'declined' : 'waiting'
 }
 
 function canonical(value: unknown): string {

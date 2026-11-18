@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { READ_BLOCK, expandHome, isUnder, normalize, placeOf, requestedCall, shellWords, sightingOf, tagFor } from './rules'
+import { READ_BLOCK, expandHome, isUnder, normalize, outcomeOf, placeOf, requestedCall, shellWords, sightingOf, tagFor } from './rules'
 import type { Verdict } from '../types'
 
 const HOME = '/home/me'
@@ -214,6 +214,21 @@ test('"asked" only when the person saw a dialog; otherwise what became of the ca
   expect(tag({ ...ASK, didRun: true })).toBe('allowed')
   expect(tag({ ...ASK, refused: true })).toBe('blocked')
   expect(tag(ASK)).toBeNull()
+})
+
+test('a dialog a host answered is no person asked', () => {
+  expect(tag({ decision: 'ask', approver: 'host', dialog: true })).toBeNull()
+  expect(tag({ decision: 'ask', approver: 'host', dialog: true, didRun: true })).toBe('allowed')
+  expect(tag({ decision: 'ask', approver: 'host', dialog: true, refused: true })).toBe('blocked')
+})
+
+test('an asked call\'s outcome: waiting, approved once it ran, declined once it ended without running', () => {
+  expect(outcomeOf('asked', { ...ASK, dialog: true })).toBe('waiting')
+  expect(outcomeOf('asked', { ...ASK, dialog: true, didRun: true, didEnd: true })).toBe('approved')
+  expect(outcomeOf('asked', { ...ASK, dialog: true, didEnd: true })).toBe('declined')
+  expect(outcomeOf('asked', { ...ASK, dialog: true, refused: true })).toBe('declined')
+  expect(outcomeOf('blocked', { decision: 'deny' })).toBe('blocked')
+  expect(outcomeOf('allowed', { decision: 'allow' })).toBe('allowed')
 })
 
 test('an ask nobody can answer is a deny', () => {

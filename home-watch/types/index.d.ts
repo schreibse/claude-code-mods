@@ -9,20 +9,23 @@ export type Verdict = {
   rule?: string
   hook?: string
   plugin?: string
+  reason?: string
   approver?: 'host' | 'person'
   dialog?: boolean
   refused?: boolean
   didRun?: boolean
+  didEnd?: boolean
 }
-export type Watched = { sighting: Sighting; verdict: Verdict; tag: Tag | null; home: string }
-export type Last = { label: string; tag: Tag }
+export type Outcome = 'blocked' | 'allowed' | 'waiting' | 'approved' | 'declined'
+export type Watched = { sighting: Sighting; verdict: Verdict; tag: Tag | null }
 
 declare module 'claude-code' {
   interface PluginState {
     'home-watch': {
       calls: Record<string, Watched>
       pending: PendingCall[]
-      last: Last | null
+      /** The id of the call the band names as the last one. */
+      last: string | null
       problem: string | null
     }
   }

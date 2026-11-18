@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, heavyScopes, invocations, isHeavy, isServe, machineRefusal, nodeScripts, parseMeminfo, parsePressure, refusal, runningRefusal, runsSandboxed, scoped, segments, serveRefusal, serveScopes, withServeElsewhere } from './rules'
+import { checkRunnerRefusal, concurrencyRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, heavyRuns, invocations, isHeavy, isServe, machineRefusal, nodeScripts, parseMeminfo, parsePressure, refusal, runningRefusal, runsSandboxed, scoped, segments, serveRefusal, serveRuns, withServeElsewhere } from './rules'
 
 const GIB = 1024 ** 3
 const shell = { cwd: '/repo', home: '/home/u' }
@@ -186,11 +186,13 @@ test('cgroup files parse; an unlimited or unreadable slice gives no reading', ()
   expect(parsePressure('', '', '')).toBeNull()
 })
 
-const slice = '0::/user.slice/user-1000.slice/user@1000.service/claude.slice/claude-cmd.slice'
-const ps = (rows: ReadonlyArray<readonly [string, string]>) => rows.map(([scope, args]) => `${slice}/${scope}   ${args}`).join('\n')
+const user = '0::/user.slice/user-1000.slice/user@1000.service'
+const slice = `${user}/claude.slice/claude-cmd.slice`
+const ps = (rows: ReadonlyArray<readonly [string, string]>) => rows.map(([scope, args], i) => ` ${100 + i}     1 ${slice}/${scope}   ${args}`).join('\n')
+const row = (pid: number, ppid: number, cgroup: string, args: string) => ` ${pid} ${ppid} ${user}/${cgroup}   ${args}`
 
-test('heavy scopes: test runners, builds and nx tasks count once per scope; the daemon and a dev server do not', () => {
-  expect(heavyScopes(ps([
+test('heavy runs: test runners, builds and nx tasks count once per scope; the daemon and a dev server do not', () => {
+  expect(heavyRuns(ps([
     ['run-p1.scope', '/usr/bin/node-24 /repo/node_modules/nx/dist/src/daemon/server/start.js'],
     ['run-p1.scope', '/usr/bin/node-24 /repo/node_modules/nx/dist/src/project-graph/plugins/isolation/plugin-worker.js'],
     ['run-p2.scope', 'node /home/u/.npm-global/bin/pnpm nx serve api'],
@@ -200,10 +202,10 @@ test('heavy scopes: test runners, builds and nx tasks count once per scope; the 
     ['run-p3.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'],
     ['run-p4.scope', '/usr/bin/node-24 /repo/node_modules/playwright/lib/common/process.js'],
   ]))).toBe(2)
-  expect(heavyScopes('0::/user.slice/user-1000.slice/user@1000.service/app.slice/ec-admin-serve.service   node nx/dist/bin/run-executor.js')).toBe(0)
-  expect(heavyScopes('0::/user.slice/user-1000.slice/user@1000.service/claude.slice/run-p9.scope   /usr/bin/node-24 /repo/node_modules/jest/bin/jest.js -i')).toBe(1)
-  expect(heavyScopes('')).toBe(0)
-  expect(heavyScopes(ps([
+  expect(heavyRuns(row(9, 1, 'app.slice/ec-admin-serve.service', 'node nx/dist/bin/run-executor.js'))).toBe(0)
+  expect(heavyRuns(row(9, 1, 'claude.slice/run-p9.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js -i'))).toBe(1)
+  expect(heavyRuns('')).toBe(0)
+  expect(heavyRuns(ps([
     ['run-p5.scope', 'node /tmp/s/shoot.mjs'],
     ['run-p5.scope', '/home/u/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell --remote-debugging-pipe'],
     ['run-p6.scope', '/usr/lib64/chromium-browser/chromium-browser --user-data-dir=/tmp/playwright_chromiumdev_profile-AbC123 --remote-debugging-pipe'],
@@ -212,14 +214,33 @@ test('heavy scopes: test runners, builds and nx tasks count once per scope; the 
 })
 
 test('dev servers are counted per scope, apart from heavy commands', () => {
-  expect(serveScopes(ps([
+  expect(serveRuns(ps([
     ['run-p1.scope', 'node /home/u/.npm-global/bin/pnpm nx serve api'],
     ['run-p1.scope', 'node /repo/node_modules/nx/dist/bin/run-executor.js'],
     ['run-p2.scope', 'bash -c cd /repo && pnpm nx serve members > /tmp/x/members.log 2>&1'],
     ['run-p3.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'],
   ]))).toBe(2)
-  expect(serveScopes('0::/user.slice/user-1000.slice/user@1000.service/claude.slice/ec-admin-serve.service   npm exec nx serve ec-admin')).toBe(1)
-  expect(serveScopes('')).toBe(0)
+  expect(serveRuns(row(9, 1, 'claude.slice/ec-admin-serve.service', 'npm exec nx serve ec-admin'))).toBe(1)
+  expect(serveRuns('')).toBe(0)
+})
+
+test('sandboxed commands in one session scope count once per sandbox', () => {
+  const session = 'claude.slice/run-p10.scope'
+  const sandboxed = (outer: number, args: string) => [
+    row(outer, 10, session, 'bwrap --new-session --die-with-parent --unshare-net'),
+    row(outer + 1, outer, session, 'bwrap --new-session --die-with-parent --unshare-pid'),
+    row(outer + 2, outer + 1, session, '/bin/bash -c exec 3<&- || exit 12'),
+    row(outer + 3, outer + 2, session, args),
+  ]
+  const claude = row(10, 1, session, 'claude')
+  const jest = '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand'
+  const twoJests = [claude, ...sandboxed(20, jest), ...sandboxed(30, jest)].join('\n')
+  expect(heavyRuns(twoJests)).toBe(2)
+  expect(runningRefusal(invocations('npx nx build api', shell), twoJests)).toContain('2 heavy commands')
+  const serveAndJest = [claude, ...sandboxed(20, 'node /repo/node_modules/.bin/nx serve api'), ...sandboxed(30, jest)].join('\n')
+  expect(serveRuns(serveAndJest)).toBe(1)
+  expect(heavyRuns(serveAndJest)).toBe(1)
+  expect(heavyRuns([claude, row(11, 10, session, 'node /repo/node_modules/typescript/lib/tsserver.js')].join('\n'))).toBe(0)
 })
 
 test('a third dev server is refused; serving is recognised however it is spelled', () => {
@@ -237,7 +258,7 @@ test('a third dev server is refused; serving is recognised however it is spelled
   expect(runningRefusal(invocations('pnpm nx serve api', shell), twoJests)).toContain('2 heavy commands')
   expect(runningRefusal(invocations('npx nx build api', shell), twoJests)).toContain('2 heavy commands')
   const serveAndJest = `${ps([['run-p1.scope', '/usr/bin/node-24 /repo/node_modules/jest/bin/jest.js --runInBand']])}
-0::/user.slice/user-1000.slice/user@1000.service/claude.slice/ec-admin-serve.service   npm exec nx serve ec-admin`
+${row(9, 1, 'claude.slice/ec-admin-serve.service', 'npm exec nx serve ec-admin')}`
   expect(runningRefusal(invocations('npx nx run ui:test --runInBand', shell), serveAndJest)).toContain('dev servers included')
   expect(runningRefusal(invocations('npx nx run ui:test --runInBand', shell), ps([['run-p1.scope', 'node /repo/node_modules/jest/bin/jest.js -i']]))).toBeNull()
 })

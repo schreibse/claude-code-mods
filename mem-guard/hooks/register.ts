@@ -98,13 +98,17 @@ export const register: Register = on => {
       if (crowded !== null) {
         return { deny: `mem-guard: ${withServeElsewhere(calls, crowded)}` }
       }
-      const ps = await $.process.run(['ps', '-eo', 'cgroup:250=,args=', '--cols', '600']).catch(() => null)
+      const ps = await $.process.run(['ps', '-eo', 'pid=,ppid=,cgroup:250=,args=', '--cols', '600']).catch(() => null)
       const busyRefusal = ps?.exitCode === 0 ? runningRefusal(calls, ps.stdout) : null
       if (busyRefusal !== null) {
         return { deny: `mem-guard: ${withServeElsewhere(calls, busyRefusal)}` }
       }
     }
+    const wrapped = scoped(e.command)
+    if (wrapped === e.command) {
+      return next(e)
+    }
     const sandbox = await $.settings.read({ key: 'sandbox' }).catch(() => undefined)
-    return runsSandboxed(sandbox, e.dangerouslyDisableSandbox) ? next(e) : next({ ...e, command: scoped(e.command) })
+    return runsSandboxed(sandbox, e.dangerouslyDisableSandbox) ? next(e) : next({ ...e, command: wrapped })
   })
 }

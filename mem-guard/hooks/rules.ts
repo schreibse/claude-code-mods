@@ -253,8 +253,8 @@ function runsNode({ line, tool }: Invocation): boolean {
   return NODE_TOOLS.includes(program) || NODE_TOOLS.includes(tool)
 }
 
-/** The sandbox wraps a call after this hook, and systemd-run inside it cannot reach the user bus. */
-export function runsSandboxed(sandbox: unknown, disableSandbox: unknown): boolean {
+/** Whether Claude Code's sandbox runs the call, where systemd-run cannot reach the user bus. */
+export function runsSandboxed(sandbox: unknown, disableSandbox: boolean | undefined): boolean {
   if (typeof sandbox !== 'object' || sandbox === null || !('enabled' in sandbox) || sandbox.enabled !== true) {
     return false
   }
@@ -287,26 +287,58 @@ const HEAVY_PROCESS =
   /\/jest(?:-cli)?\/bin\/|jest-worker\/build\/workers|\/vitest\/|playwright\/(?:cli\.js|lib\/common\/process)|\/ms-playwright\/|playwright_\w+dev_profile-|\/typescript\/(?:bin|lib)\/tsc\b|\/compiler-cli\/bundles\/src\/bin\/ngc|nx\/dist\/bin\/run-executor\.js/
 const SERVE = /\bnx(?:\.js)?\s+serve\b|:serve(?::\S+)?(?:\s|$)/
 
-/** Each scope or service in claude.slice, claude-cmd.slice included, with its processes' args, from `ps -eo cgroup=,args=`. */
-function scopesOf(ps: string): string[][] {
-  const scopes = new Map<string, string[]>()
-  for (const row of ps.split('\n')) {
-    const [, scope, args] = /\/claude\.slice\/(?:claude-cmd\.slice\/)?([^\s/]+\.(?:scope|service))\S*\s+(.*)$/.exec(row) ?? []
-    if (scope !== undefined && args !== undefined) {
-      scopes.set(scope, [...(scopes.get(scope) ?? []), args])
+const SANDBOX = /^(?:\S*\/)?bwrap\s/
+
+interface Process {
+  readonly ppid: string
+  readonly unit: string | null
+  readonly args: string
+}
+
+/** The topmost bwrap above a process: one sandboxed command runs under an outer and an inner one. */
+function outermostSandbox(processes: ReadonlyMap<string, Process>, start: string): string | null {
+  let sandbox: string | null = null
+  const seen = new Set<string>()
+  for (let pid: string | undefined = start; pid !== undefined && !seen.has(pid); pid = processes.get(pid)?.ppid) {
+    seen.add(pid)
+    if (SANDBOX.test(processes.get(pid)?.args ?? '')) {
+      sandbox = pid
     }
   }
-  return [...scopes.values()]
+  return sandbox
 }
 
-/** Heavy commands running in claude.slice, one per scope; a dev server is not one of them. */
-export function heavyScopes(ps: string): number {
-  return scopesOf(ps).filter(args => !args.some(arg => SERVE.test(arg)) && args.some(arg => HEAVY_PROCESS.test(arg))).length
+/**
+ * The commands running in claude.slice, claude-cmd.slice included, each with its processes' args, from `ps -eo pid=,ppid=,cgroup=,args=`.
+ * A scope or service is one command, except that every sandboxed command shares its session's scope, so each sandbox counts on its own.
+ */
+function runsOf(ps: string): string[][] {
+  const processes = new Map<string, Process>()
+  for (const row of ps.split('\n')) {
+    const [, pid, ppid, cgroup, args] = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(row) ?? []
+    if (pid !== undefined && ppid !== undefined && cgroup !== undefined && args !== undefined) {
+      const unit = /\/claude\.slice\/(?:claude-cmd\.slice\/)?([^\s/]+\.(?:scope|service))/.exec(cgroup)?.[1] ?? null
+      processes.set(pid, { ppid, unit, args })
+    }
+  }
+  const runs = new Map<string, string[]>()
+  for (const [pid, { unit, args }] of processes) {
+    if (unit !== null) {
+      const run = `${unit} ${outermostSandbox(processes, pid) ?? ''}`
+      runs.set(run, [...(runs.get(run) ?? []), args])
+    }
+  }
+  return [...runs.values()]
 }
 
-/** Dev servers running in claude.slice, one per scope or service. */
-export function serveScopes(ps: string): number {
-  return scopesOf(ps).filter(args => args.some(arg => SERVE.test(arg))).length
+/** Heavy commands running in claude.slice; a dev server is not one of them. */
+export function heavyRuns(ps: string): number {
+  return runsOf(ps).filter(args => !args.some(arg => SERVE.test(arg)) && args.some(arg => HEAVY_PROCESS.test(arg))).length
+}
+
+/** Dev servers running in claude.slice. */
+export function serveRuns(ps: string): number {
+  return runsOf(ps).filter(args => args.some(arg => SERVE.test(arg))).length
 }
 
 export function isServe(calls: readonly Invocation[]): boolean {
@@ -335,8 +367,8 @@ export function withServeElsewhere(calls: readonly Invocation[], refused: string
 
 /** A dev server counts as a heavy command, and a dev server start also against the dev servers. */
 export function runningRefusal(calls: readonly Invocation[], ps: string): string | null {
-  const serves = serveScopes(ps)
-  return (isServe(calls) ? serveRefusal(serves) : null) ?? concurrencyRefusal(heavyScopes(ps) + serves)
+  const serves = serveRuns(ps)
+  return (isServe(calls) ? serveRefusal(serves) : null) ?? concurrencyRefusal(heavyRuns(ps) + serves)
 }
 
 const RUNNER_WRITES: ReadonlyArray<readonly [RegExp, string]> = [

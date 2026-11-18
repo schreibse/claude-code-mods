@@ -21,6 +21,11 @@ const MAX_WRITTEN_THUMBS = 3
 const isLoud = atom({ plugin: 'quiet-bash', key: 'isLoud' } as const, false)
 // In session state, so a hot reload of this module keeps the thumbnails of rows already drawn.
 const thumbs = atom({ plugin: 'quiet-bash', key: 'thumbs' } as const, {})
+const homeCalls = atom({ plugin: 'home-watch', key: 'calls' } as const, {})
+
+async function isHomeTagged($: EngineInterface, id: string | undefined): Promise<boolean> {
+  return id !== undefined && ((await read($, homeCalls))[id]?.tag ?? null) !== null
+}
 
 async function shotInfo($: EngineInterface, file: string, mtimeMs = 0): Promise<ShotInfo | null> {
   const key = `${file}@${mtimeMs}`
@@ -148,7 +153,8 @@ async function toolRow($: EngineInterface, e: ToolUseRender, engineRow: () => Re
   }
 
   const isDone = !isRunning && !isFailed && !isInterrupted
-  if (isDone && (title === '' || isQuietRead(tool, readOnly.has(e.props.tool_use_id)))) {
+  const isQuiet = title === '' || isQuietRead(tool, readOnly.has(e.props.tool_use_id))
+  if (isDone && isQuiet && !(await isHomeTagged($, e.props.tool_use_id))) {
     return <Box />
   }
 
@@ -242,7 +248,8 @@ export const register: Register = on => {
     if (calls.some(hasThumb)) {
       return next({ ...e, props: { ...e.props, isExpanded: true } })
     }
-    if (isExpanded || calls.some(call => call.isErrored) || (await read($, isLoud))) {
+    const tagged = await Promise.all(calls.map(call => isHomeTagged($, call.tool_use_id)))
+    if (isExpanded || calls.some(call => call.isErrored) || tagged.includes(true) || (await read($, isLoud))) {
       return next(e)
     }
     const { Box } = $.ui.resolve(e)

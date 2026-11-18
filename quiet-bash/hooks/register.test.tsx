@@ -83,6 +83,25 @@ test('a pipeline-wait timeout row draws nothing, other failures stay', async ($,
   expect(await kept.find({ text: 'engine row' })).toBeDefined()
 })
 
+test('a read home-watch tagged keeps its row and its group', async ($, on) => {
+  engineToolRow(on)
+  on('ui.render', { component: 'ToolGroup' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>folded</Text>
+  })
+  on('state.get', { plugin: 'home-watch', key: 'calls' }, () => ({ value: { value: { h1: { tag: 'blocked' }, h2: { tag: null } }, version: 1 } }) as never)
+  const props = { ...ROW, tool: 'Read', input: { file_path: '/home/me/.bashrc' }, output: { type: 'text' } }
+  const tagged = await $.ui.mount({ plugin: 'quiet-bash', surface: 'terminal', component: 'ToolUse', props: { ...props, tool_use_id: 'h1' } })
+  expect(await tagged.find({ type: 'Text' })).toBeDefined()
+  const untagged = await $.ui.mount({ plugin: 'quiet-bash', surface: 'terminal', component: 'ToolUse', props: { ...props, tool_use_id: 'h2' } })
+  expect(await untagged.find({ type: 'Text' })).toBeUndefined()
+  const group = await $.ui.mount({
+    plugin: 'quiet-bash', surface: 'terminal', component: 'ToolGroup',
+    props: { calls: [{ ...props, tool_use_id: 'h1' }], isActive: false, isExpanded: false },
+  })
+  expect(await group.find({ text: 'folded' })).toBeDefined()
+})
+
 test('a group holding an image read unfolds, a plain read group stays hidden', async ($, on) => {
   on('ui.render', { component: 'ToolGroup' }, ($, e) => {
     const { Text } = $.ui.resolve(e)

@@ -1,6 +1,6 @@
 # mem-guard changelog
 
-## 0.5.1 — unreleased
+## 0.5.1 — 2026-11-19
 
 - `docker.slice` is looked up in the user manager (`systemctl --user`), where rootless Docker puts it, instead of the fixed system path `/sys/fs/cgroup/docker.slice`. A rootful Docker's system slice is no longer read.
 

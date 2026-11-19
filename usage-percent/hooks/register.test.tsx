@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { TestBody } from 'claude-code/testing'
 import { isGitPush, line, resetIn } from './register'
 
 const text = (pieces: readonly { text: string }[]) => pieces.map(p => p.text).join('')
@@ -154,4 +155,33 @@ test('a measure re-arms the memory sampler once when no session.start armed it (
   await clock.advance(10_000)
   expect(uids).toBe(1)
   expect(reads.length).toBeGreaterThan(first)
+})
+
+async function pipelineCalls($: Parameters<TestBody>[0], on: Parameters<TestBody>[1]): Promise<string[]> {
+  on('session.measure', (_, e) => ({ changed: e.changed }))
+  const clock = mock.clock(on, { now: NOW })
+  on('session.authorize', () => ({ value: null }))
+  on('session.root', () => ({ value: '/repo' }))
+  on('fs.exists', (_, e) => ({ value: e.path === '/repo/nx.json' }))
+  on('fs.read', () => {
+    throw new Error('ENOENT')
+  })
+  const calls: string[] = []
+  on('process.run', (_, e) => {
+    const argv = e.argv.join(' ')
+    calls.push(argv)
+    const stdout = argv === 'git remote get-url origin' ? 'git@gitlab.example.com:group/project.git' : argv === 'git branch --show-current' ? '12-feature' : argv.startsWith('glab ci get') ? '{"status":"success"}' : ''
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  await $.session.measure({ context: { window: 200000, percent: 34 }, rateLimits: [], changed: ['context'] })
+  await clock.advance(0)
+  return calls.filter(argv => argv.startsWith('glab') || argv.startsWith('gh '))
+}
+
+test('fetches the branch pipeline in an Nx repo by default', async ($, on) => {
+  expect(await pipelineCalls($, on)).toContain('glab ci get --branch 12-feature --output json')
+})
+
+test('the pipeline option off fetches no pipeline (issue-line shows the MR pipeline per session)', { options: { pipeline: false } }, async ($, on) => {
+  expect(await pipelineCalls($, on)).toEqual([])
 })

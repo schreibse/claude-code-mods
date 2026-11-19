@@ -22,7 +22,7 @@ const usageLine = atom({ plugin: 'usage-percent', key: 'line' } as const, null)
 const nxLine = atom({ plugin: 'usage-percent', key: 'nx' } as const, null)
 const memoryLine = atom({ plugin: 'usage-percent', key: 'memory' } as const, null)
 
-type Poll = { root: string; isNx: boolean; uid: string; head: string; pipelineAt: number; pushedAt: number; pipe: Pipeline | null; composeDirs: Map<string, string>; isBusy: boolean }
+type Poll = { root: string; isNx: boolean; isPipelineOn: boolean; uid: string; head: string; pipelineAt: number; pushedAt: number; pipe: Pipeline | null; composeDirs: Map<string, string>; isBusy: boolean }
 
 const BAR_CELLS = 4
 
@@ -178,7 +178,7 @@ async function tick($: EngineInterface, poll: Poll) {
     const now = await $.clock.now()
     const interval = poll.pipe?.state === 'running' ? PIPELINE_RUNNING_MS : PIPELINE_IDLE_MS
     const isPushSettled = poll.pushedAt > 0 && now - poll.pushedAt >= AFTER_PUSH_MS
-    if (head !== poll.head || isPushSettled || now - poll.pipelineAt >= interval) {
+    if (poll.isPipelineOn && (head !== poll.head || isPushSettled || now - poll.pipelineAt >= interval)) {
       poll.head = head
       poll.pipelineAt = now
       poll.pushedAt = 0
@@ -198,20 +198,21 @@ function startTick($: EngineInterface, poll: Poll): void {
 
 type Sampler = { poll: Poll | null; timer: Timer | null }
 
-async function startPolling($: EngineInterface, sampler: Sampler) {
+async function startPolling($: EngineInterface, sampler: Sampler, isPipelineOn: boolean) {
   sampler.timer?.cancel()
   sampler.timer = null
   sampler.poll = null
   const root = await $.session.root()
   const isNx = await $.fs.exists(`${root}/nx.json`)
   const uid = (await $.process.run(['id', '-u'])).stdout.trim()
-  const current: Poll = { root, isNx, uid, head: '', pipelineAt: 0, pushedAt: 0, pipe: null, composeDirs: new Map(), isBusy: false }
+  const current: Poll = { root, isNx, isPipelineOn, uid, head: '', pipelineAt: 0, pushedAt: 0, pipe: null, composeDirs: new Map(), isBusy: false }
   sampler.poll = current
   startTick($, current)
   sampler.timer = $.clock.every(TICK_MS, () => startTick($, current))
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const isPipelineOn = options.pipeline !== false
   const sampler: Sampler = { poll: null, timer: null }
   const usage: Usage = { context: {} as SessionContextUsage, rateLimits: [], scoped: [], scopedAt: 0, isFetching: false }
 
@@ -221,7 +222,7 @@ export const register: Register = on => {
     Object.assign(usage, { context, rateLimits })
     await redraw($, usage)
     startRefresh($, usage)
-    await startPolling($, sampler)
+    await startPolling($, sampler, isPipelineOn)
     return result
   })
 
@@ -231,7 +232,7 @@ export const register: Register = on => {
     await redraw($, usage)
     startRefresh($, usage)
     if (sampler.timer === null) {
-      await startPolling($, sampler)
+      await startPolling($, sampler, isPipelineOn)
     }
     return next(e)
   })

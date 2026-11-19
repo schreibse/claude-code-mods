@@ -9,3 +9,5 @@ Each session finds its own issue: a `/issue-line` pin, else the first issue or M
 `git -C <dir>`), so parallel sessions in linked worktrees each show theirs. A resumed session reads both from
 its transcript. Of an issue's MRs it takes the one on that branch, else the only open one. The MR number is left
 out when Claude Code's hint line already shows it. One `glab api graphql` call per refresh.
+
+![issue-line in three sessions (rendered sample)](docs/issue-line.png)

@@ -215,8 +215,8 @@ export function ciOf(status: string | null): { glyph: string; tone: 'green' | 'r
   }
 }
 
-function shorten(text: string): string {
-  return text.length <= TITLE_MAX ? text : `${text.slice(0, TITLE_MAX - 1)}…`
+export function shorten(text: string): string {
+  return text.length <= TITLE_MAX ? text : `${text.slice(0, TITLE_MAX - 1).trimEnd()}…`
 }
 
 export const register: Register = on => {

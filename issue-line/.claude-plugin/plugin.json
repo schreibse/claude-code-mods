@@ -1,0 +1,12 @@
+{
+  "name": "issue-line",
+  "version": "0.1.0",
+  "description": "The GitLab issue and MR each session works on, at the right end of the hint line under the prompt: issue number and title, MR, its pipeline and open threads, as links",
+  "author": {
+    "name": "Mathias"
+  },
+  "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/issue-line",
+  "repository": "https://github.com/schreibse/claude-code-mods",
+  "types": "./types/index.d.ts",
+  "license": "MIT"
+}

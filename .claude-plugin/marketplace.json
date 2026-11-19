@@ -62,6 +62,10 @@
       "source": "./repo-line"
     },
     {
+      "name": "issue-line",
+      "source": "./issue-line"
+    },
+    {
       "name": "needs-you",
       "source": "./needs-you"
     },

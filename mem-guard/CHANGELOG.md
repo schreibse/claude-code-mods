@@ -1,5 +1,9 @@
 # mem-guard changelog
 
+## 0.5.1 — unreleased
+
+- `docker.slice` is looked up in the user manager (`systemctl --user`), where rootless Docker puts it, instead of the fixed system path `/sys/fs/cgroup/docker.slice`. A rootful Docker's system slice is no longer read.
+
 ## 0.5.0 — 2026-11-18
 
 - Under Claude Code's sandbox (`sandbox.enabled`), a command the sandbox runs is no longer wrapped in `systemd-run`: inside the sandbox it cannot reach the user bus, so every Node command failed. A call that leaves the sandbox (`dangerouslyDisableSandbox`, unless `allowUnsandboxedCommands` is `false`) is wrapped as before. The refusals are unchanged.

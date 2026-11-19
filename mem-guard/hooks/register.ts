@@ -3,9 +3,9 @@ import type { EngineInterface, Register } from 'claude-code'
 import { checkRunnerRefusal, crowdedRefusal, drivesPlaywright, escapeRefusal, invocations, isHeavy, isServe, machineRefusal, nodeScripts, parseMeminfo, parsePressure, PS_COMMAND, refusal, runningRefusal, runsSandboxed, scoped, withServeElsewhere } from './rules'
 import type { Invocation, Pressure, ScriptsByDir } from './rules'
 
+// Rootless Docker's slice lives in the user manager, like the claude slices; absent or uncapped it reads as no pressure.
 const DOCKER_SLICE = 'docker.slice'
-// A system slice, so its path is fixed; absent or uncapped it reads as no pressure.
-const sliceDirs = new Map<string, string>([[DOCKER_SLICE, '/sys/fs/cgroup/docker.slice']])
+const sliceDirs = new Map<string, string>()
 let home = ''
 
 const CMD_SLICE = 'claude-cmd.slice'

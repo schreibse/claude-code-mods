@@ -1,6 +1,6 @@
 {
   "name": "usage-percent",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "description": "A row under the prompt: context, 5-hour, weekly and model-scoped weekly usage; in Nx repos also memory, the session's nx serve projects and the branch's pipeline",
   "author": {
     "name": "Stephan Schreiber"
@@ -8,5 +8,13 @@
   "types": "./types/index.d.ts",
   "homepage": "https://github.com/schreibse/claude-code-mods/tree/main/usage-percent",
   "repository": "https://github.com/schreibse/claude-code-mods",
-  "license": "MIT"
+  "license": "MIT",
+  "userConfig": {
+    "pipeline": {
+      "type": "boolean",
+      "title": "Pipeline",
+      "description": "Show the branch's pipeline (ci …) on the right of the row. Turn it off when issue-line shows each session's MR pipeline instead",
+      "default": true
+    }
+  }
 }

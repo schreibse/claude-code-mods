@@ -5,6 +5,7 @@
 - The `pipeline` option (default on) turns the branch's pipeline off. The pipeline follows the branch of the
   folder the session started in, so a session working in a linked worktree showed another MR's pipeline;
   with issue-line installed, turn it off and read each session's own MR pipeline on issue-line's line.
+
 ## 0.5.3 — 2026-10-19
 
 - The memory line reads `RAM ▰▰▰▱▱▱▱▱▱▱ 3.3G`, shorter than `RAM usage …`.

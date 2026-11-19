@@ -1,3 +1,4 @@
+import type { On } from 'claude-code'
 import { describe, expect, mock, test } from 'claude-code/testing'
 
 import { CHEER_SCENES, FX_WIDTH, IDLE_SCENES, WORK_SCENES, scene } from './lib/scenes.mjs'
@@ -6,12 +7,15 @@ const START = { cwd: '/tmp', surface: 'terminal', isInteractive: true } as const
 const SPINNER = { word: 'Coalescing', message: null, suffix: '…', mode: 'thinking' } as const
 
 // the band hands the render on to the mods beneath it; in a test nothing is there, so an empty box answers
-type On = Parameters<Parameters<typeof test>[1]>[1]
 const emptyBandBelow = (on: On) =>
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Box } = $.ui.resolve(e)
     return <Box />
   })
+
+type Drawn = { type: string; part?: { plugin: string }; children?: Drawn[] }
+// The kit draws a test's own render hook beside the plugin, not beneath it, so the chaining is read from the plugin's part.
+const partOf = (root: unknown, plugin: string) => (root as Drawn | undefined)?.children?.find(c => c.part?.plugin === plugin)
 
 describe('tamagoxtix', () => {
   test('the spinner becomes the monster once the session has started', async ($, on) => {
@@ -77,9 +81,8 @@ describe('tamagoxtix', () => {
     mock.clock(on, { now: Date.parse('2026-10-14T12:00:00Z') })
     on('session.id', () => ({ value: 'test-session' }))
     on('command.register', () => ({ value: { command: 'tamagoxtix' } }))
-    let widthBelow = 0
+    mock.store(on, {})
     on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
-      widthBelow = e.props.bodyColumns
       const { Text } = $.ui.resolve(e)
       return <Text>handover: resume the band test</Text>
     })
@@ -94,7 +97,9 @@ describe('tamagoxtix', () => {
     expect(await ui.find({ in: 'tamagoxtix-idle', type: 'Text', text: /waiting for you|monster/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /handover: resume the band test/ })).toBeDefined()
     // the band below sits in the caption column: past the monster's 34 columns
-    expect(widthBelow).toBe(100 - 34)
+    const own = partOf(await ui.find({ type: 'Box' }), 'tamagoxtix')
+    expect(own?.children?.[1]).toMatchObject({ props: { paddingLeft: 34 }, children: [{ type: 'engine' }] })
+    expect(await ui.keepsBeneath()).toBe(true)
     await ui.unmount()
   })
 

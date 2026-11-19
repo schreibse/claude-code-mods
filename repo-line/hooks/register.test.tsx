@@ -6,6 +6,10 @@ const BAND = { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 100
 const RUN = { isStdoutTruncated: false, isStderrTruncated: false }
 const COMMAND = { command: 'repo-line', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 100 } }
 
+type Drawn = { type: string; part?: { plugin: string }; children?: Drawn[] }
+// The kit draws a test's own render hook beside the plugin, not beneath it, so order is read from the plugin's part.
+const partOf = (root: unknown, plugin: string) => (root as Drawn | undefined)?.children?.find(c => c.part?.plugin === plugin)
+
 function gitAnswers(on: On, answers: { dirs: string; branch: string; head: string }) {
   on('process.run', (_, e) => {
     const args = e.argv.slice(1).join(' ')
@@ -27,7 +31,11 @@ test('draws the repository badge, the branch and the worktree under the other ba
   })
   await $.session.start(START)
   const ui = await $.ui.mount({ plugin: 'repo-line', surface: 'terminal', component: 'AbovePrompt', props: BAND })
-  expect((await ui.find({ type: 'Box' }))?.text).toBe('the band above khipu  ⎇ fix/review (wt: khipu-review)')
+  const root = await ui.find({ type: 'Box' })
+  expect(root?.text).toContain(' khipu  ⎇ fix/review (wt: khipu-review)')
+  expect(partOf(root, 'repo-line')?.children?.[0]).toMatchObject({ type: 'engine' })
+  expect(await ui.keepsBeneath()).toBe(true)
+  expect(await ui.find({ type: 'Text', text: 'the band above' })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /^ khipu $/ }))?.props.backgroundColor).toBe('#57afdb')
   await ui.unmount()
 })

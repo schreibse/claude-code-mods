@@ -1,6 +1,6 @@
 # needs-you changelog
 
-## 0.1.1 — unreleased
+## 0.1.1 — 2026-11-19
 
 - Open asks no longer hide the bands beneath them (the monster, running tasks, home-watch): the
   band now draws the asks and then the other mods' bands.

@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
-import { focusIn, issueNumberOf, pickMr, projectPathOf, workdirIn } from './register'
+import { focusIn, issueNumberOf, pickMr, projectPathOf, shorten, workdirIn } from './register'
 
 const mr = (iid: string, sourceBranch: string, state = 'opened') => ({
   iid, sourceBranch, state, draft: false, webUrl: `https://gl/mr/${iid}`, resolvableDiscussionsCount: 5, resolvedDiscussionsCount: 3, headPipeline: { status: 'FAILED' },
@@ -125,4 +125,9 @@ test('leaves the MR number out when the hint line already names it, keeping the 
   const text = withoutHrefs((await ui.find({ type: 'Box' }))?.text ?? '')
   expect(text.match(/!2723/g)?.length).toBe(1)
   expect(text).toContain('ci ✗ · threads 💬 2')
+})
+
+test('cuts a long title to 40 characters with no space before the ellipsis', () => {
+  expect(shorten('Split the invoice export into one file per month')).toBe('Split the invoice export into one file…')
+  expect(shorten('Retry failed mail delivery')).toBe('Retry failed mail delivery')
 })

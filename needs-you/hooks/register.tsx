@@ -64,8 +64,9 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const open = await read($, asks)
+    const others = await next(e)
     if (e.props.hasSurvey || open.length === 0) {
-      return next(e)
+      return others
     }
     const { Box, Button, Text } = $.ui.resolve(e)
     return (
@@ -79,6 +80,7 @@ export const register: Register = on => {
             await update($, asks, () => [])
             await setToken($, 'ask', null)
           }} />
+        {others}
       </Box>
     )
   })

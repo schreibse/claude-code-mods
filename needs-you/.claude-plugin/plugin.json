@@ -1,6 +1,6 @@
 {
   "name": "needs-you",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lines where Claude waits on you are drawn in colour and pinned in a band above the prompt",
   "author": {
     "name": "Stephan Schreiber"

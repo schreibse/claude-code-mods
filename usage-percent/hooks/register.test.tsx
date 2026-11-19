@@ -142,7 +142,7 @@ test('a measure re-arms the memory sampler once when no session.start armed it (
   let uids = 0
   on('process.run', (_, e) => {
     if (e.argv.join(' ') === 'id -u') uids++
-    return { value: { exitCode: 0, stdout: '1000\n', stderr: '' } }
+    return { value: { exitCode: 0, stdout: '1000\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   const measure = () => $.session.measure({ context: { window: 200000, percent: 34 }, rateLimits: [], changed: ['context'] })
 

@@ -344,9 +344,8 @@ the person's copy and test it there. The plugin API has no OS call: on Windows `
 Write each OS change as its own commit with a test, so it can come back upstream.
 
 **4. Replace the owner's names.** Names in this README and in the messages are examples from the
-owner's repos; use the person's own. The API project there is `ec-api`, not `api`, and the
-dev-server rules only work with the real project names: read them from the repo
-(`npx nx show projects`).
+owner's repos; use the person's own. The dev-server rules only work with the real project
+names: read them from the repo (`npx nx show projects`).
 
 | Mod | Owner-specific | Where |
 |---|---|---|

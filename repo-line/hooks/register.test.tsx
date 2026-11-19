@@ -1,14 +1,16 @@
+import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 const START = { cwd: '/home/me/dev/khipu', surface: 'terminal', isInteractive: true } as const
 const BAND = { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 100 } as never
+const RUN = { isStdoutTruncated: false, isStderrTruncated: false }
+const COMMAND = { command: 'repo-line', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 100 } }
 
-type On = Parameters<Parameters<typeof test>[1]>[1]
 function gitAnswers(on: On, answers: { dirs: string; branch: string; head: string }) {
   on('process.run', (_, e) => {
     const args = e.argv.slice(1).join(' ')
     const stdout = args.startsWith('rev-parse --path-format') ? answers.dirs : args.startsWith('branch') ? answers.branch : answers.head
-    return { value: { exitCode: 0, stdout, stderr: '' } }
+    return { value: { ...RUN, exitCode: 0, stdout, stderr: '' } }
   })
 }
 
@@ -48,12 +50,12 @@ test('each new repository gets the next hue, kept across sessions; an override w
   expect((await ui.find({ type: 'Text', text: /retreats/ }))?.props.backgroundColor).toBe('#db5788')
   await ui.unmount()
 
-  expect(await $.command.run({ command: 'repo-line', args: 'color #ff8800' })).toEqual({ text: 'retreats is now #ff8800.' })
+  expect(await $.command.run({ ...COMMAND, args: 'color #ff8800' })).toEqual({ text: 'retreats is now #ff8800.' })
   ui = await mount()
   expect((await ui.find({ type: 'Text', text: /retreats/ }))?.props.backgroundColor).toBe('#ff8800')
   await ui.unmount()
-  expect(await $.command.run({ command: 'repo-line', args: 'color purple' })).toEqual({ text: 'Not a colour: purple. A hue 0-359 or #rrggbb.' })
-  expect(await $.command.run({ command: 'repo-line', args: 'color reset' })).toEqual({ text: 'retreats is now #db5788.' })
+  expect(await $.command.run({ ...COMMAND, args: 'color purple' })).toEqual({ text: 'Not a colour: purple. A hue 0-359 or #rrggbb.' })
+  expect(await $.command.run({ ...COMMAND, args: 'color reset' })).toEqual({ text: 'retreats is now #db5788.' })
 })
 
 test('outside a repository the band is left as it is', async ($, on) => {
@@ -62,7 +64,7 @@ test('outside a repository the band is left as it is', async ($, on) => {
   on('command.register', () => ({ value: { command: 'repo-line' } }))
   mock.clock(on, { now: 0 })
   mock.store(on, {})
-  on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' } }))
+  on('process.run', () => ({ value: { ...RUN, exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' } }))
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Text } = $.ui.resolve(e)
     return <Text>only the band above</Text>

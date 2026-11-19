@@ -33,7 +33,7 @@ const SKILL = { tool: 'Skill', skill: 'review-walk' } as const
 const DECIDE = 'mcp__review-walk__ReviewWalkDecide'
 
 const ask = (header: string) => ({
-  tool: 'AskUserQuestion',
+  tool: 'AskUserQuestion' as const,
   questions: [{ question: 'Null check missing: fix it?', header, multiSelect: false, options: [{ label: 'Fix', description: '' }, { label: 'Skip', description: '' }] }],
 })
 

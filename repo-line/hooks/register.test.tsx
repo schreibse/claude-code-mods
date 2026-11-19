@@ -3,7 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 
 const START = { cwd: '/home/me/dev/khipu', surface: 'terminal', isInteractive: true } as const
 const BAND = { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 100 } as never
-const RUN = { isStdoutTruncated: false, isStderrTruncated: false }
+const NOT_TRUNCATED = { isStdoutTruncated: false, isStderrTruncated: false }
 const COMMAND = { command: 'repo-line', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 100 } }
 
 type Drawn = { type: string; part?: { plugin: string }; children?: Drawn[] }
@@ -14,7 +14,7 @@ function gitAnswers(on: On, answers: { dirs: string; branch: string; head: strin
   on('process.run', (_, e) => {
     const args = e.argv.slice(1).join(' ')
     const stdout = args.startsWith('rev-parse --path-format') ? answers.dirs : args.startsWith('branch') ? answers.branch : answers.head
-    return { value: { ...RUN, exitCode: 0, stdout, stderr: '' } }
+    return { value: { ...NOT_TRUNCATED, exitCode: 0, stdout, stderr: '' } }
   })
 }
 
@@ -72,7 +72,7 @@ test('outside a repository the band is left as it is', async ($, on) => {
   on('command.register', () => ({ value: { command: 'repo-line' } }))
   mock.clock(on, { now: 0 })
   mock.store(on, {})
-  on('process.run', () => ({ value: { ...RUN, exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' } }))
+  on('process.run', () => ({ value: { ...NOT_TRUNCATED, exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' } }))
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Text } = $.ui.resolve(e)
     return <Text>only the band above</Text>

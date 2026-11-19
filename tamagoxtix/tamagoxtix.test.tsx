@@ -6,7 +6,7 @@ import { CHEER_SCENES, FX_WIDTH, IDLE_SCENES, WORK_SCENES, scene } from './lib/s
 const START = { cwd: '/tmp', surface: 'terminal', isInteractive: true } as const
 const SPINNER = { word: 'Coalescing', message: null, suffix: '…', mode: 'thinking' } as const
 
-// the band hands the render on to the mods beneath it; in a test nothing is there, so an empty box answers
+// no other mod draws a band in a test, so the test answers the band's next(e) with an empty box
 const emptyBandBelow = (on: On) =>
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Box } = $.ui.resolve(e)

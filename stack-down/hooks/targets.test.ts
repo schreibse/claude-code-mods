@@ -6,7 +6,7 @@ const ps = parsePs(`
   101   100 npm exec nx serve api
   102   101 node /repo/node_modules/.bin/../nx/dist/bin/nx.js serve api
   103   102 node dist/apps/api/main.js
-  200     1 node ./node_modules/.bin/nx serve ec-members
+  200     1 node ./node_modules/.bin/nx serve web
   300     1 /usr/bin/syncthing serve --no-browser
   400     1 node /repo/tools/nginx.js
 `)

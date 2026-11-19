@@ -20,6 +20,6 @@ test('an override is a hex colour or a hue', () => {
 })
 
 test('name from the common git dir, worktree when the toplevel differs, short head when detached', () => {
-  expect(repoFacts('/home/me/dev/khipu/.git', '/home/me/dev/khipu', 'main', 'abc1234')).toEqual({ name: 'khipu', worktree: null, branch: 'main' })
-  expect(repoFacts('/home/me/dev/khipu/.git', '/home/me/dev/khipu-review', '', 'abc1234')).toEqual({ name: 'khipu', worktree: 'khipu-review', branch: '@abc1234' })
+  expect(repoFacts('/home/me/dev/shop/.git', '/home/me/dev/shop', 'main', 'abc1234')).toEqual({ name: 'shop', worktree: null, branch: 'main' })
+  expect(repoFacts('/home/me/dev/shop/.git', '/home/me/dev/shop-review', '', 'abc1234')).toEqual({ name: 'shop', worktree: 'shop-review', branch: '@abc1234' })
 })

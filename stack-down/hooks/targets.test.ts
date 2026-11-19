@@ -20,36 +20,36 @@ test('takes the workers a server started with it', () => {
 })
 
 test('a directory is inside the repo only on a path boundary', () => {
-  expect(inside('/home/sts/Dev/retreats-hub/apps/api', '/home/sts/Dev/retreats-hub')).toBe(true)
-  expect(inside('/home/sts/Dev/retreats-hub-old', '/home/sts/Dev/retreats-hub')).toBe(false)
+  expect(inside('/home/me/dev/notes/apps/api', '/home/me/dev/notes')).toBe(true)
+  expect(inside('/home/me/dev/notes-old', '/home/me/dev/notes')).toBe(false)
 })
 
 test('brings down only the Compose projects whose files are in the repo', () => {
   const projects = [
-    { Name: 'retreats-hub', ConfigFiles: '/home/sts/Dev/retreats-hub/compose.yaml' },
-    { Name: 'khipu', ConfigFiles: '/home/sts/Dev/khipu/compose.yaml,/home/sts/Dev/khipu/compose.override.yaml' },
-    { Name: 'old', ConfigFiles: '/home/sts/Dev/retreats-hub-old/compose.yaml' },
+    { Name: 'notes', ConfigFiles: '/home/me/dev/notes/compose.yaml' },
+    { Name: 'shop', ConfigFiles: '/home/me/dev/shop/compose.yaml,/home/me/dev/shop/compose.override.yaml' },
+    { Name: 'old', ConfigFiles: '/home/me/dev/notes-old/compose.yaml' },
   ]
-  expect(composeIn(projects, '/home/sts/Dev/retreats-hub')).toEqual(['retreats-hub'])
-  expect(composeIn(projects, '/home/sts/Dev/khipu')).toEqual(['khipu'])
+  expect(composeIn(projects, '/home/me/dev/notes')).toEqual(['notes'])
+  expect(composeIn(projects, '/home/me/dev/shop')).toEqual(['shop'])
 })
 
 test('acts only for a session at a repo top level, never above the repos', () => {
   const ok = (stdout: string) => ({ exitCode: 0, stdout })
-  expect(isRepoRoot(ok('/home/sts/Dev/retreats-hub\n'), '/home/sts/Dev/retreats-hub')).toBe(true)
-  expect(isRepoRoot({ exitCode: 128, stdout: '' }, '/home/sts/Dev')).toBe(false)
-  expect(isRepoRoot(ok('/home/sts/Dev/retreats-hub\n'), '/home/sts/Dev/retreats-hub/apps/api')).toBe(false)
+  expect(isRepoRoot(ok('/home/me/dev/notes\n'), '/home/me/dev/notes')).toBe(true)
+  expect(isRepoRoot({ exitCode: 128, stdout: '' }, '/home/me/dev')).toBe(false)
+  expect(isRepoRoot(ok('/home/me/dev/notes\n'), '/home/me/dev/notes/apps/api')).toBe(false)
 })
 
 const sessions = parsePs(`
-  500     1 /home/sts/.local/bin/claude
+  500     1 /home/me/.local/bin/claude
   501   500 /bin/bash -c npx nx serve api
   502   501 node /repo/node_modules/.bin/../nx/dist/bin/nx.js serve api
   503   502 node dist/apps/api/main.js
   504   500 sh -c echo $PPID
-  600     1 /home/sts/.local/bin/claude
+  600     1 /home/me/.local/bin/claude
   601   600 node ./node_modules/.bin/nx serve web
-  700     1 /home/sts/.local/bin/claude --chrome-native-host
+  700     1 /home/me/.local/bin/claude --chrome-native-host
 `)
 
 test("finds the session's own Claude process up the hook command's ancestry", () => {
@@ -66,9 +66,9 @@ test("stops only the nx processes this session started, never another session's"
 
 test('leaves Compose up while another session works inside the repo', () => {
   const claudes = [
-    { pid: 500, cwd: '/home/sts/Dev/retreats-hub' },
-    { pid: 600, cwd: '/home/sts/Dev/retreats-hub-old' },
+    { pid: 500, cwd: '/home/me/dev/notes' },
+    { pid: 600, cwd: '/home/me/dev/notes-old' },
   ]
-  expect(othersIn(claudes, 500, '/home/sts/Dev/retreats-hub')).toBe(false)
-  expect(othersIn([...claudes, { pid: 601, cwd: '/home/sts/Dev/retreats-hub/apps/api' }], 500, '/home/sts/Dev/retreats-hub')).toBe(true)
+  expect(othersIn(claudes, 500, '/home/me/dev/notes')).toBe(false)
+  expect(othersIn([...claudes, { pid: 601, cwd: '/home/me/dev/notes/apps/api' }], 500, '/home/me/dev/notes')).toBe(true)
 })

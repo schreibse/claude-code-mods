@@ -7,7 +7,8 @@ threads ✓`, in usage-percent's look (dim labels, colour only for a state). Num
 Each session finds its own issue: a `/issue-line` pin (`5`, `#5`, `!5` or a link), else the first issue or MR
 its prompts name (`#1234`, `!1234`, `issue 1234`, an `/-/issues/`, `/-/work_items/` or `/-/merge_requests/`
 link, looked up in that link's project and host; a bare `#1234` only at the prompt's start or after an issue
-word such as `issue`, `fixes`, `closes`, `see`), else the branch of the folder
+word such as `issue`, `fixes`, `closes`, `see`, `on`, `for`; at the start or after `on`, `for` not a three-digit one, a colour
+like `#333`), else the branch of the folder
 its shell commands work in (the last absolute `cd <dir>` or `git -C <dir>`, not a subagent's), so parallel sessions in linked
 worktrees each show theirs. A resumed or cleared session reads both from its own transcript. Of an issue's MRs
 it takes the one on that branch, else the only open one on an `<issue>-…` branch (of all linked ones when none

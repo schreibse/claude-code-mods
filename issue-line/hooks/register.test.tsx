@@ -38,6 +38,14 @@ test('a bare #NN is an issue only at the start or after an issue word', () => {
   expect(focusIn('see PR #12')).toBe(null)
   expect(focusIn('use #333 instead')).toBe(null)
   expect(focusIn('grey (#999)')).toBe(null)
+  expect(focusIn('white text on #333')).toBe(null)
+  expect(focusIn('same border for #444 too')).toBe(null)
+  expect(focusIn('about #555')).toBe(null)
+  expect(focusIn(`grey\n${' '.repeat(30)}#333`)).toBe(null)
+  expect(focusIn('#333 is too dark')).toBe(null)
+  expect(focusIn('about #2331')).toEqual({ kind: 'issue', iid: 2331, host: null, project: null })
+  expect(focusIn('see #333')).toEqual({ kind: 'issue', iid: 333, host: null, project: null })
+  expect(focusIn('  (#2620) first')).toEqual({ kind: 'issue', iid: 2620, host: null, project: null })
   expect(focusIn('Issue: #2620')).toEqual({ kind: 'issue', iid: 2620, host: null, project: null })
   expect(focusIn('issue number #2620')).toEqual({ kind: 'issue', iid: 2620, host: null, project: null })
   expect(focusIn('#2620 slice H')).toEqual({ kind: 'issue', iid: 2620, host: null, project: null })
@@ -89,7 +97,7 @@ const withoutHrefs = (text: string) => text.replace(/https:\/\/gl\/\w+\/\d+/g, '
 
 type Glab = (query: string) => { exitCode: number; project?: unknown } | Promise<{ exitCode: number; project?: unknown }>
 type Transcript = { prompts: string[]; commands: string[] }
-type Scene = { transcript?: Transcript | 'fails' | (() => Promise<Transcript>); prompt?: string; hint?: string; glab?: Glab; id?: () => string; kept?: [string, unknown][]; storeSet?: () => Promise<void> }
+type Scene = { transcript?: Transcript | 'fails' | 'truncated' | (() => Promise<Transcript>); prompt?: string; hint?: string; glab?: Glab; id?: () => string; kept?: [string, unknown][]; storeSet?: () => Promise<void> }
 
 // Project group/project knows issues 2620 and 2331 and MR 2723; the main repo sits on 2620-ec-ai, the worktree /wt/2331 on 2331-import.
 const GLAB: Glab = query => {
@@ -131,6 +139,7 @@ async function mountSession($: Parameters<TestBody>[0], on: Parameters<TestBody>
     }
     const out =
       cmd === 'printenv' ? '/home/u'
+      : cmd === 'python3' && scene.transcript === 'truncated' ? '{"prompts": ["implement #23'
       : cmd === 'python3' ? JSON.stringify(typeof scene.transcript === 'function' ? await scene.transcript() : (scene.transcript ?? { prompts: [], commands: [] }))
       : glab !== null ? JSON.stringify({ data: { project: glab.project } })
       : e.argv.includes('--show-current') ? (e.init?.cwd === '/wt/2331' ? '2331-import' : '2620-ec-ai')
@@ -251,6 +260,16 @@ test('an MR with no issue shows the MR and its title once', async ($, on) => {
 
 test('a transcript scan that cannot run leaves the branch’s issue', async ($, on) => {
   const { text } = await mountSession($, on, { transcript: 'fails' })
+  expect(await text()).toContain('issue #2620 ')
+})
+
+test('a cut-off transcript scan after /clear does not keep the old session’s focus', async ($, on) => {
+  let id = 's1'
+  const { text } = await mountSession($, on, { id: () => id, transcript: 'truncated', prompt: 'implement #2331' })
+  expect(await text()).toContain('issue #2331 ')
+  await ($.session.end as (input: unknown) => Promise<unknown>)({ reason: 'clear', sessionId: 's1' })
+  id = 's2'
+  await $.prompt.submit({ text: 'go on' } as Parameters<typeof $.prompt.submit>[0])
   expect(await text()).toContain('issue #2620 ')
 })
 

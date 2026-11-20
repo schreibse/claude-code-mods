@@ -45,13 +45,17 @@ export function projectPathOf(remote: string): string | null {
   return match?.[1] ?? null
 }
 
-// A bare `#12` is an issue only at the prompt's start or after an issue word: no colour, `line #42`, `PR #12`.
-const ISSUE_WORD = /(?:^|\b(?:issues?(?:\s+number)?|fix(?:es|ed)?|close[sd]?|resolve[sd]?|see(?:\s+also)?|refs?|implement(?:s|ing)?|on|for|about))\s*:?\s*\(?$/i
+// A bare `#12` is an issue after an issue word; after `on`, `for`, `about` or at the prompt's start only when it is
+// not three digits, the one length a digits-only colour has in that range (`text on #333`).
+const ISSUE_WORD = /\b(?:issues?(?:\s+number)?|fix(?:es|ed)?|close[sd]?|resolve[sd]?|see(?:\s+also)?|refs?|implement(?:s|ing)?)\s*:?\s*\(?$/i
+const WEAK_WORD = /\b(?:on|for|about)\s*:?\s*\(?$/i
 
 function hashIn(text: string): { at: number; iid: number } | null {
   for (const match of text.matchAll(/(?:^|[\s(])#(\d{2,5})(?![\w;])/g)) {
     const at = match.index + match[0].indexOf('#')
-    if (ISSUE_WORD.test(text.slice(Math.max(0, at - 24), at))) {
+    const before = text.slice(Math.max(0, at - 24), at)
+    const isWeak = /^\s*\(?$/.test(text.slice(0, at)) || WEAK_WORD.test(before)
+    if (ISSUE_WORD.test(before) || (isWeak && match[1]!.length !== 3)) {
       return { at, iid: Number(match[1]) }
     }
   }
@@ -122,10 +126,19 @@ except OSError:
 print(json.dumps({"prompts": prompts, "commands": commands}))
 `
 
+// Empty when the scan could not run or its output was cut off at the stdout cap.
+function parseScan(json: string): { prompts: string[]; commands: string[] } {
+  try {
+    return JSON.parse(json) as { prompts: string[]; commands: string[] }
+  } catch {
+    return { prompts: [], commands: [] }
+  }
+}
+
 async function scanTranscript($: EngineInterface, home: string, id: string): Promise<Session> {
   const slug = (await $.session.root()).replace(/[^a-zA-Z0-9]/g, '-')
   const json = await run($, home, ['python3', '-I', '-c', SCAN, `~/.claude/projects/${slug}/${id}.jsonl`])
-  const { prompts, commands } = JSON.parse(json || '{"prompts":[],"commands":[]}') as { prompts: string[]; commands: string[] }
+  const { prompts, commands } = parseScan(json)
   const found = prompts.map(focusIn).find(f => f !== null) ?? null
   const workdir = commands.map(c => workdirIn(c, home)).filter(d => d !== null).at(-1) ?? null
   return { focus: found === null ? null : { ...found, source: 'prompt' }, workdir }

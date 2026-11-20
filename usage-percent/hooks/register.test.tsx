@@ -175,11 +175,11 @@ async function pipelineCalls($: Parameters<TestBody>[0], on: Parameters<TestBody
   })
   await $.session.measure({ context: { window: 200000, percent: 34 }, rateLimits: [], changed: ['context'] })
   await clock.advance(0)
-  return calls.filter(argv => argv.startsWith('glab') || argv.startsWith('gh '))
+  return calls.filter(argv => argv.startsWith('glab') || argv.startsWith('gh ') || argv === 'git rev-parse HEAD')
 }
 
 test('fetches the branch pipeline in an Nx repo by default', async ($, on) => {
-  expect(await pipelineCalls($, on)).toContain('glab ci get --branch 12-feature --output json')
+  expect(await pipelineCalls($, on)).toEqual(['git rev-parse HEAD', 'glab ci get --branch 12-feature --output json'])
 })
 
 test('the pipeline option off fetches no pipeline (issue-line shows the MR pipeline per session)', { options: { pipeline: false } }, async ($, on) => {

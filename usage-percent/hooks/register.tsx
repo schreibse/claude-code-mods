@@ -173,7 +173,7 @@ async function tick($: EngineInterface, poll: Poll) {
     }
     const [ps, head] = await Promise.all([
       $.process.run(['ps', '-eo', 'pid,args']),
-      $.process.run(['git', 'rev-parse', 'HEAD'], { cwd: poll.root }).then(r => r.stdout.trim()),
+      poll.isPipelineOn ? $.process.run(['git', 'rev-parse', 'HEAD'], { cwd: poll.root }).then(r => r.stdout.trim()) : poll.head,
     ])
     const now = await $.clock.now()
     const interval = poll.pipe?.state === 'running' ? PIPELINE_RUNNING_MS : PIPELINE_IDLE_MS

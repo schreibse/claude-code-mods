@@ -1,5 +1,10 @@
 # issue-line changelog
 
+## 0.1.1 — 2026-11-25
+
+The issue number and title are one link. A terminal Claude Code draws no OSC 8 links in prints a link's URL
+after its text, and the two links printed the issue URL twice; now it prints it once, after the title.
+
 ## 0.1.0 — 2026-11-19
 
 First release. At the right end of the hint line under the prompt: `issue #1234 <title…> · mr !5678 · ci ✓ ·

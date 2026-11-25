@@ -155,10 +155,11 @@ async function mountSession($: Parameters<TestBody>[0], on: Parameters<TestBody>
     await $.prompt.submit({ text: scene.prompt } as Parameters<typeof $.prompt.submit>[0])
   }
   await clock.advance(0)
-  const text = async () => {
+  const rawText = async () => {
     const ui = await $.ui.mount({ plugin: 'issue-line', surface: 'terminal', component: 'PromptHint', props: { isDraft: false, isWorking: false, hint: scene.hint ?? '?' } })
-    return withoutHrefs((await ui.find({ type: 'Box' }))?.text ?? '')
+    return (await ui.find({ type: 'Box' }))?.text ?? ''
   }
+  const text = async () => withoutHrefs(await rawText())
   const command = async (args: string) => {
     const result = await $.command.run({ command: 'issue-line', args } as Parameters<typeof $.command.run>[0])
     await clock.advance(0)
@@ -169,7 +170,7 @@ async function mountSession($: Parameters<TestBody>[0], on: Parameters<TestBody>
     await call({ tool: 'Bash', command, description: 'run', agentId })
     await clock.advance(0)
   }
-  return { text, kept, queries, command, clock, bash }
+  return { text, rawText, kept, queries, command, clock, bash }
 }
 
 test('a session told about #2620 shows the issue and its MR on the branch', async ($, on) => {
@@ -249,6 +250,11 @@ test('leaves only the MR number out when the hint line already names it, keeping
   const line = await text()
   expect(line.match(/!2723/g)?.length).toBe(1)
   expect(line).toContain('· mr draft · ci ✗ · threads 💬 2')
+})
+
+test('a terminal without OSC 8 links prints the issue URL once', async ($, on) => {
+  const { rawText } = await mountSession($, on, { prompt: 'implement #2620' })
+  expect((await rawText()).split('https://gl/i/2620').length - 1).toBe(1)
 })
 
 test('an MR with no issue shows the MR and its title once', async ($, on) => {

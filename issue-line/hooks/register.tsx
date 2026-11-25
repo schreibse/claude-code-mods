@@ -423,20 +423,16 @@ export const register: Register = on => {
           <Text> </Text>
         </Box>
         <Box flexShrink={1} flexWrap="nowrap" minWidth={0} height={1} overflow="hidden">
-          <Box flexShrink={0}>
-            <Text dimColor>{head.label}</Text>
-            {head.number === '' ? null : (
+          {/* One link for number and title: a terminal without OSC 8 prints its URL once, after the title. */}
+          <Box flexShrink={1} minWidth={8} height={1} overflow="hidden">
+            <Text wrap="truncate-end">
+              <Text dimColor>{head.label}</Text>
               <Link href={head.url}>
                 <Text color={head.isClosed ? 'red' : undefined}>{head.number}</Text>
+                <Text color="red">{head.isClosed ? ' closed' : ''}</Text>
+                <Text dimColor>{`${head.number === '' ? '' : ' '}${shorten(head.title)}`}</Text>
               </Link>
-            )}
-            <Text color="red">{head.isClosed ? ' closed' : ''}</Text>
-            <Text dimColor>{head.number === '' ? '' : ' '}</Text>
-          </Box>
-          <Box flexShrink={1} minWidth={8} height={1} overflow="hidden">
-            <Link href={head.url}>
-              <Text dimColor wrap="truncate-end">{shorten(head.title)}</Text>
-            </Link>
+            </Text>
           </Box>
           <Box flexShrink={0}>
             <Text dimColor>{mr === null && line!.openMrs > 1 ? ` · ${line!.openMrs} open mrs` : ''}</Text>
